@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sized for 1280x720 landscape automotive screens. -->
+    <dimen name="header_height">72dp</dimen>
+    <dimen name="screen_padding">20dp</dimen>
+    <dimen name="panel_padding">20dp</dimen>
+    <dimen name="panel_gap">16dp</dimen>
+    <dimen name="button_min_size">80dp</dimen>
+    <dimen name="button_height">72dp</dimen>
+    <dimen name="button_text">18sp</dimen>
+    <dimen name="header_title">28sp</dimen>
+    <dimen name="status_text">18sp</dimen>
+    <dimen name="song_title">26sp</dimen>
+    <dimen name="song_meta">20sp</dimen>
+    <dimen name="section_title">18sp</dimen>
+    <dimen name="artwork_size">220dp</dimen>
+    <dimen name="library_tab_height">56dp</dimen>
+    <dimen name="folder_row_height">72dp</dimen>
+    <dimen name="usb_bar_height">88dp</dimen>
+    <dimen name="corner_radius">12dp</dimen>
+</resources>

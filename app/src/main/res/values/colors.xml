@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_app">#0B1016</color>
+    <color name="bg_header">#121A24</color>
+    <color name="bg_panel">#151E2A</color>
+    <color name="bg_button">#243044</color>
+    <color name="bg_button_disabled">#1A2433</color>
+    <color name="accent">#E0A100</color>
+    <color name="text_primary">#F4F7FB</color>
+    <color name="text_secondary">#A8B3C4</color>
+    <color name="text_muted">#6E7A8A</color>
+    <color name="divider">#2A3648</color>
+    <color name="seek_track">#2F3D52</color>
+    <color name="unplayable_dim">#66F4F7FB</color>
+    <color name="launcher_background">#0D1B2A</color>
+    <color name="launcher_foreground">#E0A100</color>
+</resources>
