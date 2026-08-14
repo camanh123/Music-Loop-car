@@ -74,7 +74,7 @@ class FilesystemAudioFileProbe(
         val folderRelative = MusicFolderPaths.relativeToVolume(volumeRoot, folderAbsolute)
             ?: File(MusicFolderPaths.normalizeAbsolute(folderAbsolute)).name.orEmpty()
 
-        val rootUnreadable = !walk(
+        val rootUnreadable = walk(
             dir = folder,
             relativeFromVolume = folderRelative,
             depth = 0,

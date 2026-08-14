@@ -5,12 +5,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
+import kotlin.io.path.createTempDirectory
 
 class FilesystemAudioFileProbeTest {
 
     @Test
     fun discoversNestedAndUppercaseMp3() {
-        val root = createTempDir("musicloop-probe")
+        val root = createTempDirectory("musicloop-probe").toFile()
         try {
             val music = File(root, "Music").apply { mkdirs() }
             File(music, "song1.mp3").writeText("a")
@@ -46,7 +47,7 @@ class FilesystemAudioFileProbeTest {
 
     @Test
     fun unreadableChildDirectoryDoesNotAbortScan() {
-        val root = createTempDir("musicloop-unreadable")
+        val root = createTempDirectory("musicloop-unreadable").toFile()
         try {
             val music = File(root, "Music").apply { mkdirs() }
             File(music, "keep.mp3").writeText("ok")
