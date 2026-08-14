@@ -44,6 +44,10 @@ android {
     lint {
         abortOnError = true
         checkReleaseBuilds = false
+        // Sideloaded CARFU Android 10 app; not distributed via Google Play.
+        disable += "ExpiredTargetSdkVersion"
+        // Keep AndroidX artifacts compatible with compileSdk 33 / minSdk 29.
+        disable += "GradleDependency"
     }
 }
 
