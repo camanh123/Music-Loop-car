@@ -12,7 +12,11 @@ android {
         minSdk = 29
         targetSdk = 29
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
+    }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
     }
 
     buildTypes {
@@ -55,4 +59,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.10.1")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.activity:activity-ktx:1.6.1")
+
+    testImplementation("junit:junit:4.13.2")
 }

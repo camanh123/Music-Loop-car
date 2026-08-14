@@ -15,5 +15,7 @@
     <dimen name="section_title">18sp</dimen>
     <dimen name="artwork_size">220dp</dimen>
     <dimen name="library_tab_height">56dp</dimen>
+    <dimen name="folder_row_height">72dp</dimen>
+    <dimen name="usb_bar_height">88dp</dimen>
     <dimen name="corner_radius">12dp</dimen>
 </resources>

@@ -3,6 +3,6 @@ package com.musicloop.car
 import android.app.Application
 
 /**
- * Process entry point. Phase 1 has no network, analytics, or background work.
+ * Process entry point. No network or analytics.
  */
 class MusicLoopApp : Application()
