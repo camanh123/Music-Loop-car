@@ -33,6 +33,10 @@ interface PlaybackStateRepository {
     fun save(state: SavedPlaybackState)
     fun loadRepeatMode(): RepeatMode
     fun saveRepeatMode(mode: RepeatMode)
+    fun loadShuffle(): Boolean = false
+    fun saveShuffle(enabled: Boolean) = Unit
+    fun loadQueueSnapshot(): SavedQueueState? = null
+    fun saveQueueSnapshot(state: SavedQueueState?) = Unit
 }
 
 interface AudioFocusGate {

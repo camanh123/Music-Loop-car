@@ -23,6 +23,16 @@
             android:textSize="@dimen/header_title"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/buttonSettings"
+            style="@style/Widget.MusicLoopCar.LibraryTab"
+            android:layout_width="wrap_content"
+            android:layout_height="56dp"
+            android:layout_weight="0"
+            android:enabled="true"
+            android:minWidth="140dp"
+            android:text="@string/action_settings" />
+
         <TextView
             android:id="@+id/usbLabel"
             android:layout_width="wrap_content"
@@ -331,8 +341,16 @@
                 <Button
                     android:id="@+id/tabFavorites"
                     style="@style/Widget.MusicLoopCar.LibraryTab"
+                    android:enabled="true"
                     android:layout_weight="1"
                     android:text="@string/library_favorites" />
+
+                <Button
+                    android:id="@+id/tabPlaylists"
+                    style="@style/Widget.MusicLoopCar.LibraryTab"
+                    android:enabled="true"
+                    android:layout_weight="1"
+                    android:text="@string/library_playlists" />
             </LinearLayout>
 
             <TextView
@@ -343,6 +361,41 @@
                 android:text="@string/library_empty"
                 android:textColor="@color/text_muted"
                 android:textSize="16sp" />
+
+            <LinearLayout
+                android:id="@+id/playlistActions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <Button
+                    android:id="@+id/buttonLibraryAction"
+                    style="@style/Widget.MusicLoopCar.TransportButton"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/library_tab_height"
+                    android:minHeight="@dimen/library_tab_height"
+                    android:layout_weight="1"
+                    android:text="@string/playlist_create" />
+
+                <Button
+                    android:id="@+id/buttonLibrarySecondary"
+                    style="@style/Widget.MusicLoopCar.TransportButton"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/library_tab_height"
+                    android:minHeight="@dimen/library_tab_height"
+                    android:layout_weight="1"
+                    android:text="@string/playlist_play" />
+
+                <Button
+                    android:id="@+id/buttonLibraryTertiary"
+                    style="@style/Widget.MusicLoopCar.TransportButton"
+                    android:layout_width="0dp"
+                    android:layout_height="@dimen/library_tab_height"
+                    android:minHeight="@dimen/library_tab_height"
+                    android:layout_weight="1"
+                    android:text="@string/playlist_add_current" />
+            </LinearLayout>
 
             <ListView
                 android:id="@+id/songList"

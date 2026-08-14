@@ -14,7 +14,8 @@ data class QueueItem(
     val durationMs: Long?,
     val filename: String,
     val extension: String,
-    val playable: Boolean
+    val playable: Boolean,
+    val favorite: Boolean = false
 ) {
     fun sameTrack(other: QueueItem?): Boolean {
         if (other == null) return false

@@ -3,6 +3,8 @@
 
     <!-- USB music libraries are read-only. WRITE_EXTERNAL_STORAGE is intentionally omitted. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:name=".MusicLoopApp"
@@ -19,6 +21,7 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:exported="true"
+            android:launchMode="singleTop"
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustPan">
             <intent-filter>
@@ -31,5 +34,26 @@
             android:exported="false"
             android:screenOrientation="landscape"
             android:windowSoftInputMode="adjustPan" />
+        <activity
+            android:name=".ui.settings.SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustPan" />
+
+        <service
+            android:name=".playback.MusicPlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <receiver
+            android:name=".boot.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

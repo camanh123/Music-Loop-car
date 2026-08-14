@@ -14,6 +14,15 @@ interface AudioTrackDao {
     @Query("SELECT * FROM audio_tracks WHERE volume_identity = :volumeIdentity AND relative_path = :relativePath LIMIT 1")
     fun find(volumeIdentity: String, relativePath: String): AudioTrackEntity?
 
+    @Query("SELECT * FROM audio_tracks WHERE id = :id LIMIT 1")
+    fun findById(id: Long): AudioTrackEntity?
+
+    @Query("SELECT * FROM audio_tracks WHERE volume_identity = :volumeIdentity AND favorite = 1 ORDER BY title COLLATE NOCASE")
+    fun favoritesForVolume(volumeIdentity: String): List<AudioTrackEntity>
+
+    @Query("UPDATE audio_tracks SET favorite = :favorite WHERE id = :id")
+    fun setFavorite(id: Long, favorite: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     fun insert(entity: AudioTrackEntity): Long
 

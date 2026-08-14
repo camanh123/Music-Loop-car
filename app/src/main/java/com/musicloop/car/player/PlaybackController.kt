@@ -1,10 +1,12 @@
 package com.musicloop.car.player
 
+import kotlin.random.Random
+
 /**
- * UI → PlaybackController → PlayerEngine → MediaPlayerEngine → USB file (read-only).
+ * UI / Service → PlaybackController → PlayerEngine → MediaPlayerEngine → USB file (read-only).
  *
- * Owns player state, library-queue navigation, resume clamping, and USB-disconnect
- * stop. Does not auto-play after USB reconnect or app restart.
+ * Owns player state, queue navigation (including shuffle/repeat), resume clamping,
+ * and USB-disconnect stop. Does not auto-play after USB reconnect.
  */
 class PlaybackController(
     private val engine: PlayerEngine,
@@ -12,9 +14,13 @@ class PlaybackController(
     private val audioFocus: AudioFocusGate,
     private val fileAccess: TrackFileAccess,
     private val clock: () -> Long = { System.currentTimeMillis() },
+    private val random: Random = Random.Default,
     private val listener: (PlaybackSnapshot) -> Unit
 ) {
+    private var sourceItems: List<QueueItem> = emptyList()
     private var queue: List<QueueItem> = emptyList()
+    private var queueSource: QueueSource = QueueSource.ALL_SONGS
+    private var playlistId: Long? = null
     private var currentIndex: Int = -1
     private var current: QueueItem? = null
     private var state: PlayerState = PlayerState.IDLE
@@ -22,6 +28,7 @@ class PlaybackController(
     private var durationMs: Int = 0
     private var pendingSeekMs: Int = 0
     private var repeatMode: RepeatMode = store.loadRepeatMode()
+    private var shuffleEnabled: Boolean = store.loadShuffle()
     private var message: PlaybackMessage = PlaybackMessage.NONE
     private var error: PlaybackError? = null
     private var volumeIdentity: String? = null
@@ -54,6 +61,9 @@ class PlaybackController(
             positionMs = positionMs,
             durationMs = durationMs,
             repeatMode = repeatMode,
+            shuffleEnabled = shuffleEnabled,
+            queueSource = queueSource,
+            playlistId = playlistId,
             message = message,
             error = error
         )
@@ -89,17 +99,25 @@ class PlaybackController(
     }
 
     fun setQueue(items: List<QueueItem>) {
-        queue = items
+        setSourceQueue(items, QueueSource.ALL_SONGS, null)
+    }
+
+    fun setSourceQueue(items: List<QueueItem>, source: QueueSource, playlistId: Long? = null) {
+        sourceItems = items
+        queueSource = source
+        this.playlistId = playlistId
+        applyQueueFromSource(rebuildShuffle = false)
         val playing = current
         if (playing != null) {
-            val index = items.indexOfFirst { it.sameTrack(playing) }
+            val index = queue.indexOfFirst { it.sameTrack(playing) }
             currentIndex = index
             if (index >= 0) {
-                current = items[index]
+                current = queue[index]
             }
         } else {
             tryRestoreFromStore()
         }
+        persistQueue()
     }
 
     fun playUserSelected(item: QueueItem) {
@@ -108,6 +126,10 @@ class PlaybackController(
             message = PlaybackMessage.USB_DISCONNECTED
             emit()
             return
+        }
+        if (shuffleEnabled) {
+            queue = ShuffleQueue.build(sourceItems, item, random)
+            persistQueue()
         }
         val index = indexOf(item)
         startTrack(item, index, resumeFromMs = 0, userInitiated = true)
@@ -161,7 +183,8 @@ class PlaybackController(
     }
 
     fun next() {
-        advance(direction = 1, wrap = true)
+        val wrap = true
+        advance(direction = 1, wrap = wrap)
     }
 
     fun previous() {
@@ -170,18 +193,65 @@ class PlaybackController(
         }
         val position = livePosition()
         if (QueueNavigator.previousAction(position) == PreviousAction.RESTART) {
-            seekTo(0)
-            if (state == PlayerState.COMPLETED || state == PlayerState.IDLE || state == PlayerState.ERROR) {
-                playPause()
-            }
+            restartCurrent()
             return
         }
-        advance(direction = -1, wrap = true)
+        val result = QueueNavigator.findPlayable(
+            size = queue.size,
+            fromIndex = currentIndex.coerceAtLeast(0),
+            direction = -1,
+            wrap = false
+        ) { index -> canAutoPlay(queue[index]) }
+        if (result.ended || result.exhausted || result.index == null) {
+            restartCurrent()
+            return
+        }
+        val item = queue[result.index]
+        startTrack(item, result.index, resumeFromMs = 0, userInitiated = true)
     }
 
     fun cycleRepeatMode() {
-        repeatMode = if (repeatMode == RepeatMode.OFF) RepeatMode.ONE else RepeatMode.OFF
+        setRepeatMode(
+            when (repeatMode) {
+                RepeatMode.OFF -> RepeatMode.ALL
+                RepeatMode.ALL -> RepeatMode.ONE
+                RepeatMode.ONE -> RepeatMode.OFF
+            }
+        )
+    }
+
+    fun setRepeatMode(mode: RepeatMode) {
+        repeatMode = mode
         store.saveRepeatMode(repeatMode)
+        emit()
+    }
+
+    fun setShuffle(enabled: Boolean) {
+        if (shuffleEnabled == enabled) {
+            emit()
+            return
+        }
+        shuffleEnabled = enabled
+        store.saveShuffle(enabled)
+        if (enabled) {
+            queue = ShuffleQueue.build(sourceItems, current, random)
+        } else {
+            queue = sourceItems
+        }
+        currentIndex = current?.let { indexOf(it) } ?: currentIndex
+        persistQueue()
+        emit()
+    }
+
+    fun toggleShuffle() {
+        setShuffle(!shuffleEnabled)
+    }
+
+    fun updateCurrentFavorite(favorite: Boolean) {
+        val playing = current ?: return
+        current = playing.copy(favorite = favorite)
+        sourceItems = sourceItems.map { if (it.sameTrack(playing)) it.copy(favorite = favorite) else it }
+        queue = queue.map { if (it.sameTrack(playing)) it.copy(favorite = favorite) else it }
         emit()
     }
 
@@ -199,6 +269,7 @@ class PlaybackController(
         }
         positionMs = livePosition()
         persist(force = true)
+        persistQueue()
         PlaybackLog.usbDisconnected(current?.filename)
         stopEngine(abandonFocus = true)
         volumeRoot = null
@@ -211,13 +282,39 @@ class PlaybackController(
         tryRestoreFromStore()
     }
 
+    fun tryStartPlayback(): Boolean {
+        if (state == PlayerState.USB_DISCONNECTED || volumeRoot == null) {
+            return false
+        }
+        val item = current ?: return false
+        if (!item.playable) {
+            return false
+        }
+        if (fileAccess.resolveReadable(volumeRoot, item.relativePath) == null) {
+            return false
+        }
+        if (state == PlayerState.PLAYING || state == PlayerState.PREPARING) {
+            return true
+        }
+        playPause()
+        return snapshot().state == PlayerState.PLAYING || snapshot().state == PlayerState.PREPARING
+    }
+
     fun release() {
         released = true
         positionMs = livePosition()
         persist(force = true)
+        persistQueue()
         stopEngine(abandonFocus = true)
         engine.setListener(null)
         engine.release()
+    }
+
+    private fun restartCurrent() {
+        seekTo(0)
+        if (state == PlayerState.COMPLETED || state == PlayerState.IDLE || state == PlayerState.ERROR) {
+            playPause()
+        }
     }
 
     private fun resumePaused() {
@@ -257,7 +354,7 @@ class PlaybackController(
         playGeneration++
         prepareGeneration = playGeneration
         current = item
-        currentIndex = index
+        currentIndex = if (index >= 0) index else indexOf(item)
         durationMs = item.durationMs?.toInt()?.coerceAtLeast(0) ?: 0
         pendingSeekMs = ResumeValidator.clampPosition(resumeFromMs, durationMs.takeIf { it > 0 })
         positionMs = pendingSeekMs
@@ -265,6 +362,7 @@ class PlaybackController(
         message = PlaybackMessage.PREPARING
         state = PlayerState.PREPARING
         persist(force = true)
+        persistQueue()
         emit()
         PlaybackLog.prepareAttempt(item.filename, item.extension, path)
         try {
@@ -314,13 +412,31 @@ class PlaybackController(
         positionMs = durationMs
         state = PlayerState.COMPLETED
         persist(force = true)
-        if (repeatMode == RepeatMode.ONE) {
-            val item = current ?: return
-            startTrack(item, currentIndex, resumeFromMs = 0, userInitiated = true)
-            return
+        when (repeatMode) {
+            RepeatMode.ONE -> {
+                val item = current ?: return
+                startTrack(item, currentIndex, resumeFromMs = 0, userInitiated = true)
+            }
+            RepeatMode.ALL -> {
+                emit()
+                if (shuffleEnabled && isLastPlayable()) {
+                    queue = ShuffleQueue.reshuffleExcludingCurrentFirst(sourceItems, current, random)
+                    persistQueue()
+                    val next = queue.firstOrNull { canAutoPlay(it) }
+                    if (next == null) {
+                        stopAfterQueueExhausted()
+                    } else {
+                        startTrack(next, indexOf(next), resumeFromMs = 0, userInitiated = true)
+                    }
+                } else {
+                    advance(direction = 1, wrap = true)
+                }
+            }
+            RepeatMode.OFF -> {
+                emit()
+                advance(direction = 1, wrap = false)
+            }
         }
-        emit()
-        advance(direction = 1, wrap = false)
     }
 
     private fun handleError(playbackError: PlaybackError) {
@@ -386,6 +502,16 @@ class PlaybackController(
         return fileAccess.resolveReadable(volumeRoot, item.relativePath) != null
     }
 
+    private fun isLastPlayable(): Boolean {
+        val result = QueueNavigator.findPlayable(
+            size = queue.size,
+            fromIndex = currentIndex.coerceAtLeast(0),
+            direction = 1,
+            wrap = false
+        ) { index -> canAutoPlay(queue[index]) }
+        return result.ended || result.exhausted || result.index == null
+    }
+
     private fun stopAfterQueueExhausted() {
         stopEngine(abandonFocus = true)
         state = if (current == null) PlayerState.IDLE else PlayerState.COMPLETED
@@ -409,6 +535,26 @@ class PlaybackController(
         }
     }
 
+    private fun applyQueueFromSource(rebuildShuffle: Boolean) {
+        if (shuffleEnabled) {
+            val saved = store.loadQueueSnapshot()
+            val restored = saved?.takeIf {
+                it.shuffled && it.source == queueSource && it.playlistId == playlistId
+            }?.relativePaths?.mapNotNull { path ->
+                sourceItems.find { it.relativePath == path }
+            }.orEmpty()
+            queue = when {
+                rebuildShuffle -> ShuffleQueue.build(sourceItems, current, random)
+                restored.isNotEmpty() -> ShuffleQueue.prune(restored, sourceItems)
+                else -> ShuffleQueue.prune(queue, sourceItems).ifEmpty {
+                    ShuffleQueue.build(sourceItems, current, random)
+                }
+            }
+        } else {
+            queue = sourceItems
+        }
+    }
+
     private fun tryRestoreFromStore() {
         val saved = store.load() ?: return
         if (volumeIdentity != null && saved.volumeIdentity != volumeIdentity) {
@@ -421,8 +567,15 @@ class PlaybackController(
                 it.volumeIdentity,
                 it.relativePath
             )
+        } ?: sourceItems.firstOrNull {
+            ResumeValidator.sameTrack(
+                saved.volumeIdentity,
+                saved.relativePath,
+                it.volumeIdentity,
+                it.relativePath
+            )
         }
-        if (fromQueue == null && queue.isNotEmpty()) {
+        if (fromQueue == null && sourceItems.isNotEmpty()) {
             return
         }
         val item = fromQueue ?: QueueItem(
@@ -438,7 +591,7 @@ class PlaybackController(
             playable = true
         )
         current = item
-        currentIndex = if (fromQueue == null) -1 else queue.indexOf(fromQueue)
+        currentIndex = if (fromQueue == null) -1 else indexOf(fromQueue)
         durationMs = saved.durationMs
         pendingSeekMs = ResumeValidator.clampPosition(
             saved.positionMs,
@@ -485,6 +638,17 @@ class PlaybackController(
                 artist = item.artist,
                 album = item.album,
                 durationMs = durationMs
+            )
+        )
+    }
+
+    private fun persistQueue() {
+        store.saveQueueSnapshot(
+            SavedQueueState(
+                source = queueSource,
+                playlistId = playlistId,
+                relativePaths = queue.map { it.relativePath },
+                shuffled = shuffleEnabled
             )
         )
     }

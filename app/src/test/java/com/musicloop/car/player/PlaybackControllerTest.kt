@@ -194,7 +194,7 @@ class PlaybackControllerTest {
         val playback = controller(engine)
         playback.setQueue(listOf(item("a.mp3"), item("b.mp3")))
         playback.playUserSelected(item("a.mp3"))
-        playback.cycleRepeatMode()
+        playback.setRepeatMode(RepeatMode.ONE)
         assertEquals(RepeatMode.ONE, playback.snapshot().repeatMode)
         engine.complete()
         assertEquals("a.mp3", playback.snapshot().track?.filename)
@@ -330,5 +330,79 @@ class PlaybackControllerTest {
         playback.playUserSelected(item("Music/song.mp3"))
         assertEquals("$root/Music/song.mp3", engine.lastPath)
         assertNotEquals("/storage/USB1/Music/song.mp3", engine.lastPath)
+    }
+
+    @Test
+    fun cycleRepeatGoesOffAllOne() {
+        val playback = controller()
+        playback.setQueue(listOf(item("a.mp3")))
+        assertEquals(RepeatMode.OFF, playback.snapshot().repeatMode)
+        playback.cycleRepeatMode()
+        assertEquals(RepeatMode.ALL, playback.snapshot().repeatMode)
+        playback.cycleRepeatMode()
+        assertEquals(RepeatMode.ONE, playback.snapshot().repeatMode)
+        playback.cycleRepeatMode()
+        assertEquals(RepeatMode.OFF, playback.snapshot().repeatMode)
+    }
+
+    @Test
+    fun repeatAllWrapsToFirstOnCompletion() {
+        val engine = FakePlayerEngine()
+        val playback = controller(engine)
+        playback.setQueue(listOf(item("a.mp3"), item("b.mp3")))
+        playback.setRepeatMode(RepeatMode.ALL)
+        playback.playUserSelected(item("b.mp3"))
+        engine.complete()
+        assertEquals("a.mp3", playback.snapshot().track?.filename)
+        assertEquals(PlayerState.PLAYING, playback.snapshot().state)
+    }
+
+    @Test
+    fun previousAtStartRestartsCurrentTrack() {
+        val engine = FakePlayerEngine()
+        val playback = controller(engine)
+        playback.setQueue(listOf(item("a.mp3"), item("b.mp3")))
+        playback.playUserSelected(item("a.mp3"))
+        engine.positionMs = 1000
+        playback.previous()
+        assertEquals("a.mp3", playback.snapshot().track?.filename)
+        assertEquals(0, playback.snapshot().positionMs)
+    }
+
+    @Test
+    fun shuffleNextFollowsShuffledQueue() {
+        val engine = FakePlayerEngine()
+        val playback = controller(engine)
+        val tracks = listOf(item("a.mp3"), item("b.mp3"), item("c.mp3"))
+        playback.setQueue(tracks)
+        playback.playUserSelected(tracks[0])
+        playback.setShuffle(true)
+        assertTrue(playback.snapshot().shuffleEnabled)
+        playback.next()
+        val second = playback.snapshot().track?.filename
+        assertTrue(second == "b.mp3" || second == "c.mp3")
+        assertEquals(PlayerState.PLAYING, playback.snapshot().state)
+    }
+
+    @Test
+    fun oneTrackShuffleHasNoEffect() {
+        val playback = controller()
+        playback.setQueue(listOf(item("a.mp3")))
+        playback.playUserSelected(item("a.mp3"))
+        playback.setShuffle(true)
+        playback.next()
+        assertEquals("a.mp3", playback.snapshot().track?.filename)
+    }
+
+    @Test
+    fun manualSelectionWithShuffleKeepsCurrentFirst() {
+        val engine = FakePlayerEngine()
+        val playback = controller(engine)
+        val tracks = listOf(item("a.mp3"), item("b.mp3"), item("c.mp3"))
+        playback.setQueue(tracks)
+        playback.setShuffle(true)
+        playback.playUserSelected(tracks[1])
+        assertEquals("b.mp3", playback.snapshot().track?.filename)
+        assertEquals(PlayerState.PLAYING, playback.snapshot().state)
     }
 }

@@ -15,7 +15,8 @@ data class SongRow(
     val filename: String,
     val extension: String,
     val durationLabel: String,
-    val unplayable: Boolean
+    val unplayable: Boolean,
+    val favorite: Boolean = false
 ) {
     fun toQueueItem(): QueueItem {
         return QueueItem(
@@ -28,7 +29,8 @@ data class SongRow(
             durationMs = durationMs,
             filename = filename,
             extension = extension,
-            playable = !unplayable
+            playable = !unplayable,
+            favorite = favorite
         )
     }
 
@@ -45,7 +47,8 @@ data class SongRow(
                 filename = track.filename,
                 extension = track.extension,
                 durationLabel = DurationFormatter.format(track.durationMs),
-                unplayable = track.isUnplayable
+                unplayable = track.isUnplayable,
+                favorite = track.favorite
             )
         }
     }

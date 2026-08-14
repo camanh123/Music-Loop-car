@@ -41,15 +41,55 @@ class PlaybackStateStore(context: Context) : PlaybackStateRepository {
     }
 
     override fun loadRepeatMode(): RepeatMode {
-        return if (prefs.getString(KEY_REPEAT, RepeatMode.OFF.name) == RepeatMode.ONE.name) {
-            RepeatMode.ONE
-        } else {
-            RepeatMode.OFF
+        return when (prefs.getString(KEY_REPEAT, RepeatMode.OFF.name)) {
+            RepeatMode.ONE.name -> RepeatMode.ONE
+            RepeatMode.ALL.name -> RepeatMode.ALL
+            else -> RepeatMode.OFF
         }
     }
 
     override fun saveRepeatMode(mode: RepeatMode) {
         prefs.edit().putString(KEY_REPEAT, mode.name).apply()
+    }
+
+    override fun loadShuffle(): Boolean {
+        return prefs.getBoolean(KEY_SHUFFLE, false)
+    }
+
+    override fun saveShuffle(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_SHUFFLE, enabled).apply()
+    }
+
+    override fun loadQueueSnapshot(): SavedQueueState? {
+        val raw = prefs.getString(KEY_QUEUE_PATHS, null) ?: return null
+        val source = try {
+            QueueSource.valueOf(prefs.getString(KEY_QUEUE_SOURCE, QueueSource.ALL_SONGS.name) ?: QueueSource.ALL_SONGS.name)
+        } catch (_: Exception) {
+            QueueSource.ALL_SONGS
+        }
+        val playlistId = prefs.getLong(KEY_PLAYLIST_ID, -1L).takeIf { it > 0 }
+        return SavedQueueState(
+            source = source,
+            playlistId = playlistId,
+            relativePaths = raw.split('\u001f').filter { it.isNotBlank() },
+            shuffled = prefs.getBoolean(KEY_SHUFFLE, false)
+        )
+    }
+
+    override fun saveQueueSnapshot(state: SavedQueueState?) {
+        if (state == null) {
+            prefs.edit()
+                .remove(KEY_QUEUE_PATHS)
+                .remove(KEY_QUEUE_SOURCE)
+                .remove(KEY_PLAYLIST_ID)
+                .apply()
+            return
+        }
+        prefs.edit()
+            .putString(KEY_QUEUE_PATHS, state.relativePaths.joinToString("\u001f"))
+            .putString(KEY_QUEUE_SOURCE, state.source.name)
+            .putLong(KEY_PLAYLIST_ID, state.playlistId ?: -1L)
+            .apply()
     }
 
     companion object {
@@ -63,5 +103,9 @@ class PlaybackStateStore(context: Context) : PlaybackStateRepository {
         private const val KEY_ALBUM = "album"
         private const val KEY_DURATION = "duration_ms"
         private const val KEY_REPEAT = "repeat_mode"
+        private const val KEY_SHUFFLE = "shuffle"
+        private const val KEY_QUEUE_PATHS = "queue_paths"
+        private const val KEY_QUEUE_SOURCE = "queue_source"
+        private const val KEY_PLAYLIST_ID = "playlist_id"
     }
 }

@@ -12,8 +12,22 @@ enum class PlayerState {
 
 enum class RepeatMode {
     OFF,
+    ALL,
     ONE
 }
+
+enum class QueueSource {
+    ALL_SONGS,
+    FAVORITES,
+    PLAYLIST
+}
+
+data class SavedQueueState(
+    val source: QueueSource = QueueSource.ALL_SONGS,
+    val playlistId: Long? = null,
+    val relativePaths: List<String> = emptyList(),
+    val shuffled: Boolean = false
+)
 
 enum class PlaybackMessage {
     NONE,
@@ -59,9 +73,14 @@ data class PlaybackSnapshot(
     val positionMs: Int = 0,
     val durationMs: Int = 0,
     val repeatMode: RepeatMode = RepeatMode.OFF,
+    val shuffleEnabled: Boolean = false,
+    val queueSource: QueueSource = QueueSource.ALL_SONGS,
+    val playlistId: Long? = null,
     val message: PlaybackMessage = PlaybackMessage.NONE,
     val error: PlaybackError? = null
 ) {
+    val favorite: Boolean
+        get() = track?.favorite == true
     val isPlaying: Boolean
         get() = state == PlayerState.PLAYING
 

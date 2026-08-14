@@ -17,6 +17,22 @@ class RoomTrackRepository(private val dao: AudioTrackDao) : TrackRepository {
         return dao.find(volumeIdentity, relativePath)?.toDomain()
     }
 
+    fun findById(id: Long): AudioTrack? {
+        return dao.findById(id)?.toDomain()
+    }
+
+    fun favoritesForVolume(volumeIdentity: String): List<AudioTrack> {
+        return dao.favoritesForVolume(volumeIdentity).map { it.toDomain() }
+    }
+
+    fun setFavorite(id: Long, favorite: Boolean) {
+        dao.setFavorite(id, favorite)
+    }
+
+    fun tracksByIdsPreservingOrder(ids: List<Long>): List<AudioTrack> {
+        return ids.mapNotNull { dao.findById(it)?.toDomain() }
+    }
+
     override fun upsert(track: AudioTrack): AudioTrack {
         val existing = dao.find(track.volumeIdentity, track.relativePath)
         return if (existing == null) {
