@@ -146,6 +146,17 @@
                 android:scaleType="centerInside" />
 
             <TextView
+                android:id="@+id/nowPlayingStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <TextView
                 android:id="@+id/songTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -199,6 +210,9 @@
                     android:layout_weight="1"
                     android:enabled="false"
                     android:max="1000"
+                    android:minHeight="32dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
                     android:progress="0" />
 
                 <TextView

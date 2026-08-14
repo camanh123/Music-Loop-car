@@ -13,6 +13,10 @@ class RoomTrackRepository(private val dao: AudioTrackDao) : TrackRepository {
         return dao.tracksForVolume(volumeIdentity).map { it.toDomain() }
     }
 
+    fun find(volumeIdentity: String, relativePath: String): AudioTrack? {
+        return dao.find(volumeIdentity, relativePath)?.toDomain()
+    }
+
     override fun upsert(track: AudioTrack): AudioTrack {
         val existing = dao.find(track.volumeIdentity, track.relativePath)
         return if (existing == null) {
