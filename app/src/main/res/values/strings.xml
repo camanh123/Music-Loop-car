@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MusicLoop Car</string>
+    <string name="header_title">MUSIC LOOP CAR</string>
+    <string name="usb_label">USB</string>
+    <string name="usb_status_waiting">WAITING FOR USB</string>
+    <string name="usb_status_connected">CONNECTED</string>
+    <string name="usb_status_disconnected">DISCONNECTED</string>
+    <string name="usb_status_scanning">SCANNING</string>
+    <string name="music_label">Music</string>
+    <string name="music_count_placeholder">—</string>
+    <string name="now_playing">Now Playing</string>
+    <string name="now_playing_empty_title">No track selected</string>
+    <string name="now_playing_empty_artist">—</string>
+    <string name="now_playing_empty_album">—</string>
+    <string name="artwork_description">Album artwork</string>
+    <string name="playback_position_placeholder">00:00</string>
+    <string name="playback_duration_placeholder">00:00</string>
+    <string name="action_previous">Previous</string>
+    <string name="action_play_pause">Play</string>
+    <string name="action_next">Next</string>
+    <string name="action_shuffle">Shuffle</string>
+    <string name="action_repeat">Repeat</string>
+    <string name="action_favorite">Favorite</string>
+    <string name="library">Library</string>
+    <string name="library_songs">SONGS</string>
+    <string name="library_artists">ARTISTS</string>
+    <string name="library_albums">ALBUMS</string>
+    <string name="library_folders">FOLDERS</string>
+    <string name="library_favorites">FAVORITES</string>
+    <string name="library_empty">Library will appear after USB music is indexed.</string>
+</resources>

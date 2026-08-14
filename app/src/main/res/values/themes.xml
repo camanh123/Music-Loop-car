@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MusicLoopCar" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/bg_app</item>
+        <item name="android:statusBarColor">@color/bg_header</item>
+        <item name="android:navigationBarColor">@color/bg_app</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:colorBackground">@color/bg_app</item>
+    </style>
+
+    <style name="Widget.MusicLoopCar.TransportButton" parent="Widget.AppCompat.Button">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/button_height</item>
+        <item name="android:minHeight">@dimen/button_min_size</item>
+        <item name="android:minWidth">@dimen/button_min_size</item>
+        <item name="android:textSize">@dimen/button_text</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:background">@drawable/bg_button</item>
+        <item name="android:layout_margin">6dp</item>
+    </style>
+
+    <style name="Widget.MusicLoopCar.LibraryTab" parent="Widget.AppCompat.Button">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/library_tab_height</item>
+        <item name="android:minHeight">@dimen/library_tab_height</item>
+        <item name="android:textSize">16sp</item>
+        <item name="android:textAllCaps">true</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:background">@drawable/bg_button</item>
+        <item name="android:layout_margin">4dp</item>
+        <item name="android:enabled">false</item>
+    </style>
+
+    <style name="Text.MusicLoopCar.Unplayable" parent="TextAppearance.AppCompat">
+        <item name="android:textColor">@color/unplayable_dim</item>
+        <item name="android:alpha">0.4</item>
+    </style>
+</resources>
