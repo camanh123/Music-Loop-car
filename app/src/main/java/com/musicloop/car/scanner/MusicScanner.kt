@@ -74,16 +74,17 @@ class MusicScanner(
         existing: AudioTrack?
     ) {
         val absolute = MusicFolderPaths.join(volumeRoot, file.relativePath)
-        val unchanged = existing != null &&
-            existing.fileSize == file.size &&
-            existing.lastModified == file.lastModified &&
-            existing.scanState == ScanState.READY &&
-            existing.metadataState == MetadataState.READY &&
-            !existing.missingConfirmed
+        val current = existing
+        val unchanged = current != null &&
+            current.fileSize == file.size &&
+            current.lastModified == file.lastModified &&
+            current.scanState == ScanState.READY &&
+            current.metadataState == MetadataState.READY &&
+            !current.missingConfirmed
 
-        if (unchanged) {
+        if (current != null && unchanged) {
             repository.upsert(
-                existing.copy(
+                current.copy(
                     absolutePath = absolute,
                     lastVerifiedAt = clock.now(),
                     updatedAt = clock.now(),
