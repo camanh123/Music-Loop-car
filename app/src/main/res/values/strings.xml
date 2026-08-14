@@ -34,9 +34,15 @@
     <string name="playback_duration_placeholder">00:00</string>
     <string name="action_previous">Previous</string>
     <string name="action_play_pause">Play</string>
+    <string name="action_pause">Pause</string>
     <string name="action_next">Next</string>
     <string name="action_shuffle">Shuffle</string>
     <string name="action_repeat">Repeat</string>
+    <string name="action_repeat_one">Repeat 1</string>
+    <string name="playback_preparing">Đang chuẩn bị...</string>
+    <string name="playback_error_unplayable">Không thể phát file này trên thiết bị</string>
+    <string name="playback_error_no_playable">Không có bài hát có thể phát</string>
+    <string name="playback_error_missing">Không tìm thấy file</string>
     <string name="action_favorite">Favorite</string>
     <string name="library">Library</string>
     <string name="library_songs">SONGS</string>

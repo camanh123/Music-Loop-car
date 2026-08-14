@@ -5,14 +5,25 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.View
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.musicloop.car.database.RoomTrackRepository
 import com.musicloop.car.databinding.ActivityMainBinding
+import com.musicloop.car.player.AudioFocusHelper
+import com.musicloop.car.player.MediaPlayerEngine
+import com.musicloop.car.player.PlaybackController
+import com.musicloop.car.player.PlaybackMessage
+import com.musicloop.car.player.PlaybackPathResolver
+import com.musicloop.car.player.PlaybackSnapshot
+import com.musicloop.car.player.PlaybackStateStore
+import com.musicloop.car.player.PlaybackTime
+import com.musicloop.car.player.PlayerState
+import com.musicloop.car.player.RepeatMode
 import com.musicloop.car.scanner.AndroidMetadataReader
-import com.musicloop.car.scanner.DurationFormatter
 import com.musicloop.car.scanner.MusicScanController
 import com.musicloop.car.scanner.ScanPhase
 import com.musicloop.car.scanner.ScanProgress
@@ -30,7 +41,8 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Landscape automotive shell. Phase 3 adds scanning and library listing only.
+ * Landscape automotive shell. Phase 4 adds native MediaPlayer playback.
+ * Playback continues across folder-picker (onStop); the engine is released in onDestroy.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -40,6 +52,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mountMonitor: UsbMountMonitor
     private lateinit var scanController: MusicScanController
     private lateinit var trackRepository: RoomTrackRepository
+    private lateinit var playback: PlaybackController
     private val songAdapter = SongListAdapter()
 
     private val usbExecutor = Executors.newSingleThreadExecutor()
@@ -47,6 +60,23 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var lastVolumeIdentity: String? = null
     private var scannedFolderKey: String? = null
+    private var seeking: Boolean = false
+    private var lastRenderedState: PlayerState? = null
+
+    private val progressRunnable = object : Runnable {
+        override fun run() {
+            if (!::playback.isInitialized) {
+                return
+            }
+            val snapshot = playback.onProgressTick()
+            if (!seeking) {
+                renderProgress(snapshot)
+            }
+            if (snapshot.state == PlayerState.PLAYING) {
+                mainHandler.postDelayed(this, PlaybackController.PROGRESS_INTERVAL_MS)
+            }
+        }
+    }
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -72,7 +102,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        renderPlaybackPlaceholder()
         binding.songList.adapter = songAdapter
 
         val app = application as MusicLoopApp
@@ -111,6 +140,24 @@ class MainActivity : AppCompatActivity() {
             mainHandler.post { coordinator.refresh() }
         }
 
+        val engine = MediaPlayerEngine(mainHandler)
+        val audioFocus = AudioFocusHelper(this) {
+            mainHandler.post {
+                if (::playback.isInitialized) {
+                    playback.pause()
+                }
+            }
+        }
+        playback = PlaybackController(
+            engine = engine,
+            store = PlaybackStateStore(this),
+            audioFocus = audioFocus,
+            fileAccess = PlaybackPathResolver,
+            listener = { snapshot -> renderPlayback(snapshot) }
+        )
+
+        bindPlaybackControls()
+        playback.restoreDisplayOnly()
         binding.buttonChooseFolder.setOnClickListener { openFolderPicker() }
         applyUsbState(UsbUiState(UsbStatus.WAITING_FOR_USB))
     }
@@ -125,6 +172,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         coordinator.refresh()
+        if (::playback.isInitialized && playback.snapshot().state == PlayerState.PLAYING) {
+            scheduleProgress()
+        }
     }
 
     override fun onStop() {
@@ -134,10 +184,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        mainHandler.removeCallbacks(progressRunnable)
+        if (::playback.isInitialized) {
+            playback.release()
+        }
         scanController.cancel()
         usbExecutor.shutdownNow()
         scanExecutor.shutdownNow()
         super.onDestroy()
+    }
+
+    private fun bindPlaybackControls() {
+        binding.songList.setOnItemClickListener { _, _, position, _ ->
+            val row = songAdapter.getItem(position)
+            playback.playUserSelected(row.toQueueItem())
+        }
+        binding.buttonPlayPause.setOnClickListener { playback.playPause() }
+        binding.buttonPrevious.setOnClickListener { playback.previous() }
+        binding.buttonNext.setOnClickListener { playback.next() }
+        binding.buttonRepeat.setOnClickListener { playback.cycleRepeatMode() }
+        binding.buttonShuffle.isEnabled = false
+        binding.buttonFavorite.isEnabled = false
+        binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    binding.positionText.text = PlaybackTime.format(progress)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar) {
+                seeking = true
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                seeking = false
+                playback.seekTo(seekBar.progress)
+            }
+        })
     }
 
     private fun openFolderPicker() {
@@ -186,6 +269,7 @@ class MainActivity : AppCompatActivity() {
             state.volumeIdentity != null &&
             state.volumeRootPath != null
         ) {
+            playback.setVolumeContext(state.volumeIdentity, state.volumeRootPath, true)
             val key = "${state.volumeIdentity}|${state.resolvedAbsolutePath}"
             if (key != scannedFolderKey) {
                 scannedFolderKey = key
@@ -197,11 +281,19 @@ class MainActivity : AppCompatActivity() {
             }
         } else if (state.status == UsbStatus.USB_DISCONNECTED ||
             state.status == UsbStatus.USB_ERROR ||
-            state.status == UsbStatus.WAITING_FOR_USB ||
             state.status == UsbStatus.FOLDER_NOT_FOUND
         ) {
             scanController.cancel()
             scannedFolderKey = null
+            if (::playback.isInitialized) {
+                playback.onUsbDisconnected()
+            }
+        } else if (state.status == UsbStatus.WAITING_FOR_USB && !state.usbPresent) {
+            scanController.cancel()
+            scannedFolderKey = null
+            if (::playback.isInitialized && playback.snapshot().track != null) {
+                playback.onUsbDisconnected()
+            }
         }
         reloadSongs(lastVolumeIdentity)
     }
@@ -236,29 +328,125 @@ class MainActivity : AppCompatActivity() {
     private fun reloadSongs(volumeIdentity: String?) {
         if (volumeIdentity.isNullOrBlank()) {
             songAdapter.submit(emptyList())
+            playback.setQueue(emptyList())
             return
         }
         usbExecutor.execute {
-            val rows = try {
-                trackRepository.tracksForVolume(volumeIdentity).map { track ->
-                    SongRow(
-                        id = track.id,
-                        title = track.title,
-                        artist = track.artist,
-                        durationLabel = DurationFormatter.format(track.durationMs),
-                        unplayable = track.isUnplayable
-                    )
-                }
+            val tracks = try {
+                trackRepository.tracksForVolume(volumeIdentity)
             } catch (_: Exception) {
                 emptyList()
             }
+            val rows = tracks.map { SongRow.from(it) }
+            val queue = rows.map { it.toQueueItem() }
             mainHandler.post {
                 songAdapter.submit(rows)
+                playback.setQueue(queue)
                 if (rows.isNotEmpty()) {
                     binding.musicCountValue.text = getString(R.string.music_count_format, rows.size)
                 }
             }
         }
+    }
+
+    private fun renderPlayback(snapshot: PlaybackSnapshot) {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { applyPlayback(snapshot) }
+        } else {
+            applyPlayback(snapshot)
+        }
+    }
+
+    private fun applyPlayback(snapshot: PlaybackSnapshot) {
+        val track = snapshot.track
+        if (track == null) {
+            binding.songTitle.setText(R.string.now_playing_empty_title)
+            binding.songArtist.setText(R.string.now_playing_empty_artist)
+            binding.songAlbum.setText(R.string.now_playing_empty_album)
+        } else {
+            binding.songTitle.text = track.title.ifBlank { track.filename }
+            binding.songArtist.text = track.artist.ifBlank { "—" }
+            binding.songAlbum.text = track.album.ifBlank { "—" }
+        }
+
+        val statusText = statusText(snapshot)
+        if (statusText == null) {
+            binding.nowPlayingStatus.visibility = View.GONE
+        } else {
+            binding.nowPlayingStatus.visibility = View.VISIBLE
+            binding.nowPlayingStatus.text = statusText
+        }
+
+        val hasTrack = track != null
+        val usbGone = snapshot.state == PlayerState.USB_DISCONNECTED
+        binding.buttonPlayPause.isEnabled = hasTrack && !usbGone && snapshot.state != PlayerState.PREPARING
+        binding.buttonPrevious.isEnabled = hasTrack && !usbGone
+        binding.buttonNext.isEnabled = hasTrack && !usbGone
+        binding.buttonRepeat.isEnabled = true
+        binding.buttonRepeat.setText(
+            if (snapshot.repeatMode == RepeatMode.ONE) R.string.action_repeat_one else R.string.action_repeat
+        )
+        binding.buttonPlayPause.setText(
+            if (snapshot.state == PlayerState.PLAYING) R.string.action_pause else R.string.action_play_pause
+        )
+
+        if (!seeking) {
+            renderProgress(snapshot)
+        }
+
+        if (snapshot.state == PlayerState.PLAYING) {
+            scheduleProgress()
+        } else {
+            mainHandler.removeCallbacks(progressRunnable)
+        }
+
+        maybeToast(snapshot)
+    }
+
+    private fun renderProgress(snapshot: PlaybackSnapshot) {
+        val duration = snapshot.durationMs.coerceAtLeast(0)
+        val position = snapshot.positionMs.coerceAtLeast(0)
+        binding.seekBar.max = if (duration > 0) duration else 1000
+        binding.seekBar.progress = if (duration > 0) position.coerceAtMost(duration) else 0
+        binding.seekBar.isEnabled = snapshot.canSeek
+        binding.positionText.text = PlaybackTime.format(position)
+        binding.durationText.text = if (duration > 0) {
+            PlaybackTime.format(duration)
+        } else {
+            getString(R.string.playback_duration_placeholder)
+        }
+    }
+
+    private fun statusText(snapshot: PlaybackSnapshot): String? {
+        return when (snapshot.message) {
+            PlaybackMessage.NONE -> null
+            PlaybackMessage.USB_DISCONNECTED -> getString(R.string.usb_status_disconnected)
+            PlaybackMessage.CANNOT_PLAY_FILE -> getString(R.string.playback_error_unplayable)
+            PlaybackMessage.NO_PLAYABLE_TRACK -> getString(R.string.playback_error_no_playable)
+            PlaybackMessage.FILE_MISSING -> getString(R.string.playback_error_missing)
+            PlaybackMessage.PREPARING -> getString(R.string.playback_preparing)
+        }
+    }
+
+    private fun maybeToast(snapshot: PlaybackSnapshot) {
+        if (snapshot.state == lastRenderedState) {
+            return
+        }
+        lastRenderedState = snapshot.state
+        val text = when (snapshot.message) {
+            PlaybackMessage.CANNOT_PLAY_FILE -> getString(R.string.playback_error_unplayable)
+            PlaybackMessage.NO_PLAYABLE_TRACK -> getString(R.string.playback_error_no_playable)
+            PlaybackMessage.FILE_MISSING -> getString(R.string.playback_error_missing)
+            else -> null
+        }
+        if (text != null) {
+            Toast.makeText(this, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun scheduleProgress() {
+        mainHandler.removeCallbacks(progressRunnable)
+        mainHandler.postDelayed(progressRunnable, PlaybackController.PROGRESS_INTERVAL_MS)
     }
 
     private fun statusLabel(state: UsbUiState): Int {
@@ -272,22 +460,5 @@ class MainActivity : AppCompatActivity() {
                 if (state.usbPresent) R.string.usb_status_connected else R.string.usb_status_waiting
             }
         }
-    }
-
-    private fun renderPlaybackPlaceholder() {
-        binding.musicCountValue.setText(R.string.music_count_placeholder)
-        binding.songTitle.setText(R.string.now_playing_empty_title)
-        binding.songArtist.setText(R.string.now_playing_empty_artist)
-        binding.songAlbum.setText(R.string.now_playing_empty_album)
-        binding.positionText.setText(R.string.playback_position_placeholder)
-        binding.durationText.setText(R.string.playback_duration_placeholder)
-        binding.seekBar.progress = 0
-        binding.seekBar.isEnabled = false
-        binding.buttonPrevious.isEnabled = false
-        binding.buttonPlayPause.isEnabled = false
-        binding.buttonNext.isEnabled = false
-        binding.buttonShuffle.isEnabled = false
-        binding.buttonRepeat.isEnabled = false
-        binding.buttonFavorite.isEnabled = false
     }
 }
