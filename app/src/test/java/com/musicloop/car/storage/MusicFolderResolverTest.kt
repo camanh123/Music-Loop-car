@@ -81,7 +81,10 @@ class MusicFolderResolverTest {
 
     @Test
     fun ambiguousWhenTwoVolumesShareRelativePathAndNoUuid() {
-        val saved = savedMusic.copy(volumeUuid = null)
+        val saved = savedMusic.copy(
+            volumeUuid = null,
+            absolutePath = "/storage/GONE/Music"
+        )
         val a = UsbVolume(null, "USB A", "/storage/USB1", "mounted", true)
         val b = UsbVolume(null, "USB B", "/storage/USB2", "mounted", true)
         val dirs = setOf(

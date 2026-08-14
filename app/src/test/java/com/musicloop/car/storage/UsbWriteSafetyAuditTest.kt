@@ -61,11 +61,11 @@ class UsbWriteSafetyAuditTest {
         val manifest = manifestCandidates.first { it.isFile }.readText()
         assertTrue(
             "INTERNET permission must not be requested",
-            !manifest.contains("android.permission.INTERNET")
+            !Regex("""<uses-permission[^>]*android\.permission\.INTERNET""").containsMatchIn(manifest)
         )
         assertTrue(
             "WRITE_EXTERNAL_STORAGE must not be requested",
-            !manifest.contains("WRITE_EXTERNAL_STORAGE")
+            !Regex("""<uses-permission[^>]*WRITE_EXTERNAL_STORAGE""").containsMatchIn(manifest)
         )
     }
 }

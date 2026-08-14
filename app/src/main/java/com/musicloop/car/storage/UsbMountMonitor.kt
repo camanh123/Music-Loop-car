@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import androidx.core.content.ContextCompat
 
 /**
  * Listens for USB mount/unmount broadcasts. Discovery itself is read-only.
@@ -38,13 +39,27 @@ class UsbMountMonitor(
         }
         var any = false
         try {
-            appContext.registerReceiver(fileSchemeReceiver, filterWithFileScheme())
+            appContext.let { ctx ->
+                ContextCompat.registerReceiver(
+                    ctx,
+                    fileSchemeReceiver,
+                    filterWithFileScheme(),
+                    ContextCompat.RECEIVER_EXPORTED
+                )
+            }
             any = true
         } catch (_: Exception) {
             // Some firmwares reject file-scheme media filters.
         }
         try {
-            appContext.registerReceiver(plainReceiver, filterWithoutScheme())
+            appContext.let { ctx ->
+                ContextCompat.registerReceiver(
+                    ctx,
+                    plainReceiver,
+                    filterWithoutScheme(),
+                    ContextCompat.RECEIVER_EXPORTED
+                )
+            }
             any = true
         } catch (_: Exception) {
             // Some firmwares reject unschemed media filters.
