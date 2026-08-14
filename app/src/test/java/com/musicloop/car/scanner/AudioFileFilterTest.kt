@@ -17,15 +17,21 @@ class AudioFileFilterTest {
         assertTrue(AudioFileFilter.isAudioFile("a.ogg"))
         assertFalse(AudioFileFilter.isAudioFile("notes.txt"))
         assertFalse(AudioFileFilter.isAudioFile("song"))
+        assertFalse(AudioFileFilter.isAudioFile("video.mp4"))
+        assertFalse(AudioFileFilter.isAudioFile("video.MP4"))
     }
 }
 
 class FilenameTitleParserTest {
     @Test
-    fun fallbackUsesFilenameWithoutExtension() {
+    fun fallbackKeepsTrackNumberPrefix() {
         assertEquals(
-            "01 - Em Cua Ngay Hom Qua",
-            FilenameTitleParser.titleFromFilename("01 - Em Cua Ngay Hom Qua.mp3")
+            "01 - Song Name",
+            FilenameTitleParser.titleFromFilename("01 - Song Name.mp3")
+        )
+        assertEquals(
+            "SONG",
+            FilenameTitleParser.titleFromFilename("SONG.MP3")
         )
     }
 }

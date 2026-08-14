@@ -5,7 +5,8 @@ data class DiscoveredFile(
     val filename: String,
     val extension: String,
     val size: Long,
-    val lastModified: Long
+    val lastModified: Long,
+    val absolutePath: String? = null
 )
 
 data class FileSnapshot(
@@ -23,7 +24,9 @@ data class MetadataResult(
     val trackNumber: Int? = null,
     val durationMs: Long? = null,
     val success: Boolean,
-    val artworkPresent: Boolean = false
+    val artworkPresent: Boolean = false,
+    val errorClass: String? = null,
+    val errorMessage: String? = null
 )
 
 data class ScanProgress(
@@ -33,7 +36,8 @@ data class ScanProgress(
     val readyCount: Int = 0,
     val unverifiedCount: Int = 0,
     val unplayableCount: Int = 0,
-    val indexedCount: Int = 0
+    val indexedCount: Int = 0,
+    val diagnostics: ScanDiagnostics? = null
 )
 
 data class ScanOutcome(

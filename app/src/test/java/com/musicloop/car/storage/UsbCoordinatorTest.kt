@@ -79,6 +79,48 @@ class UsbCoordinatorTest {
     }
 
     @Test
+    fun unlabeledUsb1ExposesStableIdentitySoScanCanStart() {
+        val usb = UsbVolume(null, "USB DISK", "/storage/USB1", "mounted", true)
+        val dirs = mutableSetOf("/storage/USB1", "/storage/USB1/Music")
+        val store = InMemoryFolderStore()
+        val coordinator = coordinator(store, { listOf(usb) }, dirs)
+        coordinator.start()
+        coordinator.onFolderSelected(MusicFolderRecord.fromSelection("/storage/USB1/Music", usb))
+        assertEquals(UsbStatus.USB_READY, coordinator.currentState().status)
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, coordinator.currentState().volumeIdentity)
+        assertEquals("/storage/USB1", coordinator.currentState().volumeRootPath)
+        assertEquals("/storage/USB1/Music", coordinator.currentState().resolvedAbsolutePath)
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, store.load()?.volumeUuid)
+    }
+
+    @Test
+    fun unlabeledUsb1ToUsb2KeepsSameIdentity() {
+        val usb1 = UsbVolume(null, "USB DISK", "/storage/USB1", "mounted", true)
+        val usb2 = UsbVolume(null, "USB DISK", "/storage/USB2", "mounted", true)
+        val dirs = mutableSetOf("/storage/USB1", "/storage/USB1/Music")
+        val volumes = mutableListOf(usb1)
+        val store = InMemoryFolderStore()
+        val coordinator = coordinator(store, { volumes.toList() }, dirs)
+        coordinator.start()
+        coordinator.onFolderSelected(MusicFolderRecord.fromSelection("/storage/USB1/Music", usb1))
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, coordinator.currentState().volumeIdentity)
+
+        volumes.clear()
+        dirs.clear()
+        coordinator.refresh()
+
+        volumes += usb2
+        dirs += "/storage/USB2"
+        dirs += "/storage/USB2/Music"
+        coordinator.refresh()
+
+        assertEquals(UsbStatus.USB_READY, coordinator.currentState().status)
+        assertEquals("/storage/USB2/Music", coordinator.currentState().resolvedAbsolutePath)
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, coordinator.currentState().volumeIdentity)
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, store.load()?.volumeUuid)
+    }
+
+    @Test
     fun usbPresentWithoutSavedFolderNeedsSelection() {
         val dirs = mutableSetOf("/storage/USB1")
         val coordinator = coordinator(InMemoryFolderStore(), { listOf(usb1) }, dirs)

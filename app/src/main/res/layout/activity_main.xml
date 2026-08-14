@@ -362,6 +362,16 @@
                 android:textColor="@color/text_muted"
                 android:textSize="16sp" />
 
+            <TextView
+                android:id="@+id/scanDiagnosticValue"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="monospace"
+                android:textColor="@color/text_muted"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:id="@+id/playlistActions"
                 android:layout_width="match_parent"

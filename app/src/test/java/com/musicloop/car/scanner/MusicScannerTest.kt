@@ -2,6 +2,7 @@ package com.musicloop.car.scanner
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -23,6 +24,95 @@ class MusicScannerTest {
         assertEquals("Music/song.mp3", tracks[0].relativePath)
         assertEquals(ScanState.READY, tracks[0].scanState)
         assertEquals(1, scanner.metadataReadCount)
+    }
+
+    @Test
+    fun uppercaseMp3IsDiscovered() {
+        val repo = InMemoryTrackRepository()
+        val file = discovered("Music/SONG.MP3")
+        scanner(repo, FakeAudioProbe(mutableListOf(file))).scan(volume, volumeRoot, folder)
+        val track = repo.tracksForVolume(volume).single()
+        assertEquals("SONG.MP3", track.filename)
+        assertEquals("mp3", track.extension)
+        assertEquals(ScanState.READY, track.scanState)
+    }
+
+    @Test
+    fun nestedFoldersAreIndexed() {
+        val repo = InMemoryTrackRepository()
+        val files = mutableListOf(
+            discovered("Music/song1.mp3"),
+            discovered("Music/Vietnamese/song3.mp3"),
+            discovered("Music/Albums/Album1/song4.mp3")
+        )
+        scanner(repo, FakeAudioProbe(files)).scan(volume, volumeRoot, folder)
+        val paths = repo.tracksForVolume(volume).map { it.relativePath }.toSet()
+        assertEquals(
+            setOf(
+                "Music/song1.mp3",
+                "Music/Vietnamese/song3.mp3",
+                "Music/Albums/Album1/song4.mp3"
+            ),
+            paths
+        )
+    }
+
+    @Test
+    fun metadataFailureStillCreatesVisibleTrack() {
+        val repo = InMemoryTrackRepository()
+        val file = discovered("Music/song.mp3")
+        val metadata = FakeMetadataReader {
+            MetadataResult(
+                success = false,
+                errorClass = "java.lang.RuntimeException",
+                errorMessage = "setDataSource failed"
+            )
+        }
+        scanner(repo, FakeAudioProbe(mutableListOf(file)), metadata).scan(volume, volumeRoot, folder)
+        val tracks = repo.tracksForVolume(volume)
+        assertEquals(1, tracks.size)
+        val track = tracks[0]
+        assertEquals("song", track.title)
+        assertEquals("", track.artist)
+        assertEquals("", track.album)
+        assertNull(track.durationMs)
+        assertEquals(ScanState.READY, track.scanState)
+        assertEquals(MetadataState.UNVERIFIED, track.metadataState)
+        assertFalse(track.isUnplayable)
+        assertEquals(PlayableState.UNKNOWN, track.playableState)
+    }
+
+    @Test
+    fun metadataFailureDoesNotMarkPermanentUnplayable() {
+        val repo = InMemoryTrackRepository()
+        val file = discovered("Music/broken.mp3")
+        val metadata = FakeMetadataReader { MetadataResult(success = false) }
+        val probe = FakeAudioProbe(mutableListOf(file))
+        repeat(3) {
+            scanner(repo, probe, metadata, maxFailures = 3).scan(volume, volumeRoot, folder)
+        }
+        val track = repo.tracksForVolume(volume).single()
+        assertEquals(ScanState.READY, track.scanState)
+        assertEquals(MetadataState.UNVERIFIED, track.metadataState)
+        assertFalse(track.isUnplayable)
+        assertEquals(PlayableState.UNKNOWN, track.playableState)
+    }
+
+    @Test
+    fun emptyMetadataFallsBackToFilename() {
+        val repo = InMemoryTrackRepository()
+        val file = discovered("Music/01 - Song Name.mp3")
+        val metadata = FakeMetadataReader {
+            MetadataResult(success = true, title = "", artist = "", album = "", durationMs = null)
+        }
+        scanner(repo, FakeAudioProbe(mutableListOf(file)), metadata).scan(volume, volumeRoot, folder)
+        val track = repo.tracksForVolume(volume).single()
+        assertEquals("01 - Song Name", track.title)
+        assertEquals("", track.artist)
+        assertEquals("", track.album)
+        assertNull(track.durationMs)
+        assertEquals(ScanState.READY, track.scanState)
+        assertEquals(MetadataState.READY, track.metadataState)
     }
 
     @Test
@@ -120,31 +210,38 @@ class MusicScannerTest {
     }
 
     @Test
+    fun wrongVolumeIdentityReturnsEmptyLibrary() {
+        val repo = InMemoryTrackRepository()
+        scanner(repo, FakeAudioProbe(mutableListOf(discovered("Music/song.mp3"))))
+            .scan(volume, volumeRoot, folder)
+        assertEquals(1, repo.tracksForVolume(volume).size)
+        assertTrue(repo.tracksForVolume("WRONG-ID").isEmpty())
+    }
+
+    @Test
+    fun roomLibraryQueryReturnsIndexedTracks() {
+        val repo = InMemoryTrackRepository()
+        scanner(
+            repo,
+            FakeAudioProbe(
+                mutableListOf(
+                    discovered("Music/a.mp3"),
+                    discovered("Music/b.mp3")
+                )
+            )
+        ).scan(volume, volumeRoot, folder)
+        val library = repo.tracksForVolume(volume)
+        assertEquals(2, library.size)
+        assertEquals(setOf("a.mp3", "b.mp3"), library.map { it.filename }.toSet())
+    }
+
+    @Test
     fun missingMetadataFallsBackToFilename() {
         val repo = InMemoryTrackRepository()
         val file = discovered("Music/01 - Em Cua Ngay Hom Qua.mp3")
         val metadata = FakeMetadataReader { MetadataResult(success = true, title = null, artist = null) }
         scanner(repo, FakeAudioProbe(mutableListOf(file)), metadata).scan(volume, volumeRoot, folder)
         assertEquals("01 - Em Cua Ngay Hom Qua", repo.tracksForVolume(volume)[0].title)
-    }
-
-    @Test
-    fun temporaryMetadataFailureRetriesThenUnplayable() {
-        val repo = InMemoryTrackRepository()
-        val file = discovered("Music/broken.mp3")
-        val metadata = FakeMetadataReader { MetadataResult(success = false) }
-        val probe = FakeAudioProbe(mutableListOf(file))
-        val first = scanner(repo, probe, metadata, maxFailures = 3)
-        first.scan(volume, volumeRoot, folder)
-        assertEquals(MetadataState.UNVERIFIED, repo.tracksForVolume(volume)[0].metadataState)
-        assertFalse(repo.tracksForVolume(volume)[0].isUnplayable)
-
-        scanner(repo, probe, metadata, maxFailures = 3).scan(volume, volumeRoot, folder)
-        scanner(repo, probe, metadata, maxFailures = 3).scan(volume, volumeRoot, folder)
-        val track = repo.tracksForVolume(volume)[0]
-        assertEquals(ScanState.UNPLAYABLE, track.scanState)
-        assertTrue(track.isUnplayable)
-        assertEquals(3, track.verifyFailures)
     }
 
     @Test
@@ -168,6 +265,17 @@ class MusicScannerTest {
     }
 
     @Test
+    fun stableFileIsIndexedReady() {
+        val repo = InMemoryTrackRepository()
+        val file = discovered("Music/stable.mp3", size = 2048, mtime = 50L)
+        scanner(repo, FakeAudioProbe(mutableListOf(file))).scan(volume, volumeRoot, folder)
+        val track = repo.tracksForVolume(volume).single()
+        assertEquals(ScanState.READY, track.scanState)
+        assertEquals(2048L, track.fileSize)
+        assertEquals(50L, track.lastModified)
+    }
+
+    @Test
     fun cancelDuringScanDoesNotPrune() {
         val repo = InMemoryTrackRepository()
         val keep = discovered("Music/keep.mp3")
@@ -187,6 +295,22 @@ class MusicScannerTest {
         val outcome = scanner.scan(volume, volumeRoot, folder)
         assertEquals(ScanPhase.INTERRUPTED, outcome.phase)
         assertEquals(1, repo.tracksForVolume(volume).size)
+    }
+
+    @Test
+    fun diagnosticsCaptureLibraryCountAfterMetadataFailure() {
+        val repo = InMemoryTrackRepository()
+        val scanner = scanner(
+            repo,
+            FakeAudioProbe(mutableListOf(discovered("Music/song.mp3"))),
+            FakeMetadataReader { MetadataResult(success = false) }
+        )
+        scanner.scan(volume, volumeRoot, folder)
+        assertEquals(1, scanner.lastDiagnostics.libraryCount)
+        assertEquals(1, scanner.lastDiagnostics.acceptedAudioFiles)
+        assertEquals(0, scanner.lastDiagnostics.metadataOk)
+        assertEquals(1, scanner.lastDiagnostics.metadataFailed)
+        assertTrue(scanner.lastDiagnostics.formatSummary().contains("Library:"))
     }
 
     private fun discovered(

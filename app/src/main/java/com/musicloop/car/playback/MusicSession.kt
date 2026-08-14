@@ -12,6 +12,7 @@ import com.musicloop.car.player.TrackFileAccess
 import com.musicloop.car.scanner.AudioTrack
 import com.musicloop.car.scanner.MusicScanController
 import com.musicloop.car.scanner.ScanProgress
+import com.musicloop.car.scanner.ScannerLog
 import com.musicloop.car.settings.AppSettingsRepository
 import com.musicloop.car.storage.UsbCoordinator
 import com.musicloop.car.ui.library.SongRow
@@ -82,6 +83,12 @@ class MusicSession(
                 )
             }
             maybeAutoPlay()
+        } else if (state.status == UsbStatus.USB_READY) {
+            ScannerLog.w(
+                "USB_READY but scan not started volumeIdentity=${state.volumeIdentity} " +
+                    "volumeRoot=${state.volumeRootPath} folder=${state.resolvedAbsolutePath} " +
+                    "permission=${hasReadPermission()}"
+            )
         } else if (state.status == UsbStatus.USB_DISCONNECTED ||
             state.status == UsbStatus.USB_ERROR ||
             state.status == UsbStatus.FOLDER_NOT_FOUND
@@ -170,9 +177,11 @@ class MusicSession(
         ioExecutor.execute {
             val loaded = try {
                 tracks.tracksForVolume(volumeIdentity)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                ScannerLog.error("tracksForVolume", error)
                 emptyList()
             }
+            ScannerLog.i("LIBRARY_RESULT volumeIdentity=$volumeIdentity track count=${loaded.size}")
             mainPoster {
                 lastTracks = loaded
                 listener.onLibrary(loaded, volumeIdentity)

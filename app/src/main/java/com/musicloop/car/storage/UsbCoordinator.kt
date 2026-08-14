@@ -113,7 +113,7 @@ class UsbCoordinator(
                     resolvedAbsolutePath = resolved.absolutePath,
                     hasSavedFolder = true,
                     usbPresent = true,
-                    volumeIdentity = resolved.volume.identity ?: resolved.record.volumeUuid,
+                    volumeIdentity = resolved.volume.stableIdentity(),
                     volumeRootPath = resolved.volume.absolutePath
                 )
             }

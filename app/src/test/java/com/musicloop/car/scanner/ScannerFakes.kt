@@ -51,12 +51,18 @@ class FakeAudioProbe(
     val snapshots = mutableMapOf<String, ArrayDeque<FileSnapshot>>()
     var listCalls = 0
 
-    override fun listAudioFiles(folderAbsolute: String, volumeRoot: String): List<DiscoveredFile> {
+    override fun listAudioFiles(folderAbsolute: String, volumeRoot: String): EnumerationResult {
         listCalls += 1
         if (throwOnList) {
             error("usb vanished during enumerate")
         }
-        return files.toList()
+        return EnumerationResult(
+            files = files.toList(),
+            totalFilesystemEntries = files.size,
+            audioCandidates = files.size,
+            acceptedAudioFiles = files.size,
+            folderAbsolutePath = folderAbsolute
+        )
     }
 
     override fun snapshot(absolutePath: String): FileSnapshot? {

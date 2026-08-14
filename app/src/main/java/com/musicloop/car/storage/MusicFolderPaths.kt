@@ -36,14 +36,16 @@ object MusicFolderPaths {
     fun relativeToVolume(volumeRoot: String, absoluteFolder: String): String? {
         val root = normalizeAbsolute(volumeRoot)
         val folder = normalizeAbsolute(absoluteFolder)
-        if (folder == root) {
+        if (folder.equals(root, ignoreCase = true)) {
             return ""
         }
-        val prefix = "$root/"
-        if (!folder.startsWith(prefix)) {
+        if (!folder.startsWith("$root/", ignoreCase = true)) {
             return null
         }
-        return normalizeRelative(folder.removePrefix(prefix))
+        if (folder.length <= root.length) {
+            return ""
+        }
+        return normalizeRelative(folder.substring(root.length))
     }
 
     fun join(volumeRoot: String, relativePath: String): String {
