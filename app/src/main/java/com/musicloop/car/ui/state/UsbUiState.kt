@@ -15,7 +15,9 @@ data class UsbUiState(
     val musicFolderLabel: String? = null,
     val resolvedAbsolutePath: String? = null,
     val hasSavedFolder: Boolean = false,
-    val usbPresent: Boolean = false
+    val usbPresent: Boolean = false,
+    val volumeIdentity: String? = null,
+    val volumeRootPath: String? = null
 ) {
     val folderButtonIsChange: Boolean
         get() = hasSavedFolder

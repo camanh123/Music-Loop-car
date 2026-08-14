@@ -286,6 +286,7 @@
                 <Button
                     android:id="@+id/tabSongs"
                     style="@style/Widget.MusicLoopCar.LibraryTab"
+                    android:enabled="true"
                     android:layout_weight="1"
                     android:text="@string/library_songs" />
 
@@ -321,14 +322,22 @@
             </LinearLayout>
 
             <TextView
-                android:id="@+id/libraryPlaceholder"
+                android:id="@+id/scanStatusValue"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
                 android:text="@string/library_empty"
                 android:textColor="@color/text_muted"
-                android:textSize="20sp" />
+                android:textSize="16sp" />
+
+            <ListView
+                android:id="@+id/songList"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:divider="@color/divider"
+                android:dividerHeight="1dp" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

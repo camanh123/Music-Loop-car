@@ -45,4 +45,12 @@
     <string name="library_folders">FOLDERS</string>
     <string name="library_favorites">FAVORITES</string>
     <string name="library_empty">Library will appear after USB music is indexed.</string>
+    <string name="track_unplayable">Không phát được</string>
+    <string name="scan_in_progress">Đang quét nhạc...</string>
+    <string name="scan_checking">Đang kiểm tra %1$d / %2$d</string>
+    <string name="scan_complete">Đã quét %1$d bài</string>
+    <string name="scan_ready_count">%1$d bài sẵn sàng</string>
+    <string name="scan_unverified_count">%1$d bài chưa xác minh</string>
+    <string name="scan_interrupted">Đã dừng quét (USB ngắt hoặc bị gián đoạn)</string>
+    <string name="music_count_format">%1$d</string>
 </resources>

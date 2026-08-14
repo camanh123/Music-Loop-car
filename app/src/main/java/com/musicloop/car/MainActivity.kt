@@ -9,20 +9,28 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.musicloop.car.database.RoomTrackRepository
 import com.musicloop.car.databinding.ActivityMainBinding
+import com.musicloop.car.scanner.AndroidMetadataReader
+import com.musicloop.car.scanner.DurationFormatter
+import com.musicloop.car.scanner.MusicScanController
+import com.musicloop.car.scanner.ScanPhase
+import com.musicloop.car.scanner.ScanProgress
+import com.musicloop.car.storage.MusicFolderResolver
 import com.musicloop.car.storage.MusicFolderStore
 import com.musicloop.car.storage.UsbCoordinator
 import com.musicloop.car.storage.UsbMountMonitor
 import com.musicloop.car.storage.UsbStorageManager
-import com.musicloop.car.storage.MusicFolderResolver
 import com.musicloop.car.ui.folderpicker.FolderPickerActivity
+import com.musicloop.car.ui.library.SongListAdapter
+import com.musicloop.car.ui.library.SongRow
 import com.musicloop.car.ui.state.UsbStatus
 import com.musicloop.car.ui.state.UsbUiState
 import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Landscape automotive shell. Phase 2 wires USB discovery and folder memory only.
+ * Landscape automotive shell. Phase 3 adds scanning and library listing only.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -30,9 +38,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var usbStorageManager: UsbStorageManager
     private lateinit var coordinator: UsbCoordinator
     private lateinit var mountMonitor: UsbMountMonitor
+    private lateinit var scanController: MusicScanController
+    private lateinit var trackRepository: RoomTrackRepository
+    private val songAdapter = SongListAdapter()
 
-    private val ioExecutor = Executors.newSingleThreadExecutor()
+    private val usbExecutor = Executors.newSingleThreadExecutor()
+    private val scanExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var lastVolumeIdentity: String? = null
+    private var scannedFolderKey: String? = null
 
     private val folderPickerLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -47,6 +61,7 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
+            scannedFolderKey = null
             coordinator.refresh()
         } else {
             Toast.makeText(this, R.string.permission_required, Toast.LENGTH_LONG).show()
@@ -58,7 +73,10 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         renderPlaybackPlaceholder()
+        binding.songList.adapter = songAdapter
 
+        val app = application as MusicLoopApp
+        trackRepository = RoomTrackRepository(app.database.audioTrackDao())
         usbStorageManager = UsbStorageManager(this)
         val store = MusicFolderStore(this)
         coordinator = UsbCoordinator(
@@ -78,9 +96,16 @@ class MainActivity : AppCompatActivity() {
                     false
                 }
             },
-            ioExecutor = ioExecutor,
+            ioExecutor = usbExecutor,
             mainPoster = { block -> mainHandler.post(block) },
             listener = { state -> renderUsbState(state) }
+        )
+        scanController = MusicScanController(
+            repository = trackRepository,
+            metadataReader = AndroidMetadataReader(),
+            ioExecutor = scanExecutor,
+            mainPoster = { block -> mainHandler.post(block) },
+            listener = { progress -> renderScanProgress(progress) }
         )
         mountMonitor = UsbMountMonitor(this) {
             mainHandler.post { coordinator.refresh() }
@@ -109,7 +134,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        ioExecutor.shutdownNow()
+        scanController.cancel()
+        usbExecutor.shutdownNow()
+        scanExecutor.shutdownNow()
         super.onDestroy()
     }
 
@@ -150,6 +177,88 @@ class MainActivity : AppCompatActivity() {
         binding.buttonChooseFolder.setText(
             if (state.folderButtonIsChange) R.string.change_music_folder else R.string.choose_music_folder
         )
+        if (state.volumeIdentity != null) {
+            lastVolumeIdentity = state.volumeIdentity
+        }
+        if (state.status == UsbStatus.USB_READY &&
+            hasReadPermission() &&
+            state.resolvedAbsolutePath != null &&
+            state.volumeIdentity != null &&
+            state.volumeRootPath != null
+        ) {
+            val key = "${state.volumeIdentity}|${state.resolvedAbsolutePath}"
+            if (key != scannedFolderKey) {
+                scannedFolderKey = key
+                scanController.startScan(
+                    state.volumeIdentity,
+                    state.volumeRootPath,
+                    state.resolvedAbsolutePath
+                )
+            }
+        } else if (state.status == UsbStatus.USB_DISCONNECTED ||
+            state.status == UsbStatus.USB_ERROR ||
+            state.status == UsbStatus.WAITING_FOR_USB ||
+            state.status == UsbStatus.FOLDER_NOT_FOUND
+        ) {
+            scanController.cancel()
+            scannedFolderKey = null
+        }
+        reloadSongs(lastVolumeIdentity)
+    }
+
+    private fun renderScanProgress(progress: ScanProgress) {
+        binding.scanStatusValue.text = when (progress.phase) {
+            ScanPhase.IDLE -> getString(R.string.library_empty)
+            ScanPhase.ENUMERATING -> getString(R.string.scan_in_progress)
+            ScanPhase.CHECKING -> getString(
+                R.string.scan_checking,
+                progress.processed,
+                progress.total
+            )
+            ScanPhase.COMPLETE -> {
+                val complete = getString(R.string.scan_complete, progress.indexedCount)
+                val ready = getString(R.string.scan_ready_count, progress.readyCount)
+                val unverified = if (progress.unverifiedCount > 0) {
+                    " • " + getString(R.string.scan_unverified_count, progress.unverifiedCount)
+                } else {
+                    ""
+                }
+                "$complete • $ready$unverified"
+            }
+            ScanPhase.INTERRUPTED -> getString(R.string.scan_interrupted)
+        }
+        if (progress.indexedCount > 0) {
+            binding.musicCountValue.text = getString(R.string.music_count_format, progress.indexedCount)
+        }
+        reloadSongs(lastVolumeIdentity)
+    }
+
+    private fun reloadSongs(volumeIdentity: String?) {
+        if (volumeIdentity.isNullOrBlank()) {
+            songAdapter.submit(emptyList())
+            return
+        }
+        usbExecutor.execute {
+            val rows = try {
+                trackRepository.tracksForVolume(volumeIdentity).map { track ->
+                    SongRow(
+                        id = track.id,
+                        title = track.title,
+                        artist = track.artist,
+                        durationLabel = DurationFormatter.format(track.durationMs),
+                        unplayable = track.isUnplayable
+                    )
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+            mainHandler.post {
+                songAdapter.submit(rows)
+                if (rows.isNotEmpty()) {
+                    binding.musicCountValue.text = getString(R.string.music_count_format, rows.size)
+                }
+            }
+        }
     }
 
     private fun statusLabel(state: UsbUiState): Int {
