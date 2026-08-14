@@ -11,7 +11,7 @@ fun interface MainPoster {
 
 /**
  * Coordinates USB discovery, saved-folder restore, and hotplug status.
- * Does not scan audio, play media, or write to USB.
+ * Scanning is owned by MusicScanController.
  */
 class UsbCoordinator(
     private val discoverVolumes: () -> List<UsbVolume>,
@@ -87,7 +87,8 @@ class UsbCoordinator(
                 status = status,
                 musicFolderLabel = saved?.displayLabel(),
                 hasSavedFolder = saved != null,
-                usbPresent = false
+                usbPresent = false,
+                volumeIdentity = saved?.volumeUuid
             )
         }
 
@@ -111,21 +112,25 @@ class UsbCoordinator(
                     musicFolderLabel = resolved.record.displayLabel(),
                     resolvedAbsolutePath = resolved.absolutePath,
                     hasSavedFolder = true,
-                    usbPresent = true
+                    usbPresent = true,
+                    volumeIdentity = resolved.volume.identity ?: resolved.record.volumeUuid,
+                    volumeRootPath = resolved.volume.absolutePath
                 )
             }
             FolderResolveResult.WaitingForUsb -> UsbUiState(
                 status = if (usbPresent) UsbStatus.WAITING_FOR_USB else UsbStatus.USB_DISCONNECTED,
                 musicFolderLabel = saved.displayLabel(),
                 hasSavedFolder = true,
-                usbPresent = usbPresent
+                usbPresent = usbPresent,
+                volumeIdentity = saved.volumeUuid
             )
             FolderResolveResult.FolderNotFound,
             FolderResolveResult.Ambiguous -> UsbUiState(
                 status = UsbStatus.FOLDER_NOT_FOUND,
                 musicFolderLabel = saved.displayLabel(),
                 hasSavedFolder = true,
-                usbPresent = true
+                usbPresent = true,
+                volumeIdentity = saved.volumeUuid
             )
         }
     }
