@@ -4,7 +4,9 @@ import android.media.MediaMetadataRetriever
 
 /**
  * Read-only metadata extraction. Never writes tags or files.
- * Artwork bytes are not decoded in Phase 3.
+ * Artwork bytes are not decoded here.
+ *
+ * Failure is enrichment-only: the scanner still indexes the file.
  */
 class AndroidMetadataReader : MetadataReader {
 
@@ -27,13 +29,18 @@ class AndroidMetadataReader : MetadataReader {
                 success = true,
                 artworkPresent = false
             )
-        } catch (_: Exception) {
-            MetadataResult(success = false)
+        } catch (error: Exception) {
+            ScannerLog.error("MediaMetadataRetriever", error)
+            MetadataResult(
+                success = false,
+                errorClass = error.javaClass.name,
+                errorMessage = error.message
+            )
         } finally {
             try {
                 retriever.release()
-            } catch (_: Exception) {
-                // Ignore retriever release failures.
+            } catch (error: Exception) {
+                ScannerLog.error("MediaMetadataRetriever.release", error)
             }
         }
     }

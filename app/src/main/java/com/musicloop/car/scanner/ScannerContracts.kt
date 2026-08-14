@@ -1,7 +1,7 @@
 package com.musicloop.car.scanner
 
 interface AudioFileProbe {
-    fun listAudioFiles(folderAbsolute: String, volumeRoot: String): List<DiscoveredFile>
+    fun listAudioFiles(folderAbsolute: String, volumeRoot: String): EnumerationResult
     fun snapshot(absolutePath: String): FileSnapshot?
     fun isVolumePresent(): Boolean
 }

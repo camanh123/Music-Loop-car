@@ -22,7 +22,7 @@ data class MusicFolderRecord(
             return MusicFolderRecord(
                 absolutePath = MusicFolderPaths.normalizeAbsolute(absolutePath),
                 relativePath = relative,
-                volumeUuid = volume?.identity,
+                volumeUuid = volume?.stableIdentity(),
                 volumeLabel = volume?.label ?: "USB",
                 folderName = MusicFolderPaths.folderName(relative).ifEmpty {
                     volume?.label ?: "USB"

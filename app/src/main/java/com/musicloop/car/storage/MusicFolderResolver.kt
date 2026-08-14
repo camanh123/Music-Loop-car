@@ -42,18 +42,30 @@ class MusicFolderResolver(
         val savedIdentity = saved.volumeUuid?.takeIf { it.isNotBlank() }
 
         if (savedIdentity != null) {
-            val matchedVolume = mounted.find { volume ->
-                identitiesMatch(volume.identity, savedIdentity)
+            val matchedVolumes = mounted.filter { volume ->
+                identitiesMatch(volume.stableIdentity(), savedIdentity)
             }
-            if (matchedVolume == null) {
-                // A different stick may be inserted. Do not pick its folders.
-                return FolderResolveResult.WaitingForUsb
-            }
-            val resolved = MusicFolderPaths.join(matchedVolume.absolutePath, saved.relativePath)
-            return if (isDirectory(resolved)) {
-                found(resolved, matchedVolume, saved)
-            } else {
-                FolderResolveResult.FolderNotFound
+            when {
+                matchedVolumes.size == 1 -> {
+                    val matchedVolume = matchedVolumes.first()
+                    val resolved = MusicFolderPaths.join(matchedVolume.absolutePath, saved.relativePath)
+                    return if (isDirectory(resolved)) {
+                        found(resolved, matchedVolume, saved)
+                    } else {
+                        FolderResolveResult.FolderNotFound
+                    }
+                }
+                matchedVolumes.isEmpty() -> {
+                    if (savedIdentity.equals(UsbVolume.UNLABELED_USB_IDENTITY, ignoreCase = true)) {
+                        // Older unlabeled mounts may later expose a UUID; try relative match.
+                    } else {
+                        // A different stick may be inserted. Do not pick its folders.
+                        return FolderResolveResult.WaitingForUsb
+                    }
+                }
+                else -> {
+                    // Several unlabeled volumes share the fallback identity; disambiguate below.
+                }
             }
         }
 
@@ -99,7 +111,7 @@ class MusicFolderResolver(
         val updated = saved.copy(
             absolutePath = MusicFolderPaths.normalizeAbsolute(absolutePath),
             relativePath = relative,
-            volumeUuid = volume.identity ?: saved.volumeUuid,
+            volumeUuid = volume.stableIdentity(),
             volumeLabel = volume.label ?: saved.volumeLabel,
             folderName = MusicFolderPaths.folderName(relative).ifEmpty {
                 saved.folderName.ifEmpty { volume.label ?: "USB" }
@@ -109,7 +121,7 @@ class MusicFolderResolver(
     }
 
     private fun identitiesMatch(volumeIdentity: String?, savedIdentity: String): Boolean {
-        if (volumeIdentity.isNullOrBlank()) {
+        if (volumeIdentity.isNullOrBlank() || savedIdentity.isBlank()) {
             return false
         }
         return volumeIdentity.equals(savedIdentity, ignoreCase = true)

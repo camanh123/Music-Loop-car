@@ -200,12 +200,19 @@ class MainActivity : AppCompatActivity(), MusicPlaybackService.UiCallbacks {
                 binding.songList.adapter = songAdapter
                 val rows = allTracks.map { SongRow.from(it) }
                 songAdapter.submit(rows)
-                if (lastScanProgress == null) {
-                    binding.scanStatusValue.setText(R.string.library_empty)
+                val progress = lastScanProgress
+                if (progress == null || progress.phase == ScanPhase.IDLE) {
+                    if (rows.isEmpty()) {
+                        binding.scanStatusValue.setText(R.string.library_empty)
+                        binding.scanDiagnosticValue.visibility = View.GONE
+                    }
+                } else {
+                    renderScanProgress(progress)
                 }
             }
             LibraryTab.FAVORITES -> {
                 binding.playlistActions.visibility = View.GONE
+                binding.scanDiagnosticValue.visibility = View.GONE
                 binding.songList.adapter = songAdapter
                 val rows = allTracks.filter { it.favorite }.map { SongRow.from(it) }
                 songAdapter.submit(rows)
@@ -220,6 +227,7 @@ class MainActivity : AppCompatActivity(), MusicPlaybackService.UiCallbacks {
     private fun renderPlaylists() {
         val svc = service ?: return
         binding.playlistActions.visibility = View.VISIBLE
+        binding.scanDiagnosticValue.visibility = View.GONE
         val openId = openPlaylistId
         if (openId == null) {
             binding.songList.adapter = playlistAdapter
@@ -470,19 +478,26 @@ class MainActivity : AppCompatActivity(), MusicPlaybackService.UiCallbacks {
         }
         binding.scanStatusValue.text = when (progress.phase) {
             ScanPhase.IDLE -> getString(R.string.library_empty)
-            ScanPhase.ENUMERATING -> getString(R.string.scan_in_progress)
-            ScanPhase.CHECKING -> getString(R.string.scan_checking, progress.processed, progress.total)
+            ScanPhase.ENUMERATING,
+            ScanPhase.CHECKING -> getString(R.string.scan_in_progress)
             ScanPhase.COMPLETE -> {
-                val complete = getString(R.string.scan_complete, progress.indexedCount)
-                val ready = getString(R.string.scan_ready_count, progress.readyCount)
-                val unverified = if (progress.unverifiedCount > 0) {
-                    " • " + getString(R.string.scan_unverified_count, progress.unverifiedCount)
+                val unread = progress.diagnostics?.metadataFailed ?: progress.unverifiedCount
+                if (unread > 0) {
+                    getString(R.string.scan_complete_metadata_unread, progress.indexedCount, unread)
                 } else {
-                    ""
+                    getString(R.string.scan_complete, progress.indexedCount)
                 }
-                "$complete • $ready$unverified"
             }
             ScanPhase.INTERRUPTED -> getString(R.string.scan_interrupted)
+        }
+        val diagnostic = progress.diagnostics
+        if (diagnostic != null &&
+            (progress.phase == ScanPhase.COMPLETE || progress.phase == ScanPhase.INTERRUPTED)
+        ) {
+            binding.scanDiagnosticValue.visibility = View.VISIBLE
+            binding.scanDiagnosticValue.text = diagnostic.formatSummary()
+        } else if (progress.phase == ScanPhase.ENUMERATING || progress.phase == ScanPhase.CHECKING) {
+            binding.scanDiagnosticValue.visibility = View.GONE
         }
         if (progress.indexedCount > 0) {
             binding.musicCountValue.text = getString(R.string.music_count_format, progress.indexedCount)

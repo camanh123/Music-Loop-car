@@ -1,6 +1,7 @@
 package com.musicloop.car.scanner
 
 import com.musicloop.car.storage.MainPoster
+import java.io.File
 import java.util.concurrent.Executor
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -32,6 +33,11 @@ class MusicScanController(
         volumeRoot.set(volumeRootPath)
         emit(ScanProgress(phase = ScanPhase.ENUMERATING))
         ioExecutor.execute {
+            ScannerLog.i("SCAN_START")
+            ScannerLog.i("volumeIdentity=$volumeIdentity")
+            ScannerLog.i("volumeRoot=$volumeRootPath")
+            ScannerLog.i("folderAbsolute=$folderAbsolute")
+            logFolderFlags(folderAbsolute)
             val scanner = MusicScanner(
                 probe = FilesystemAudioFileProbe(
                     volumeRootProvider = { volumeRoot.get() },
@@ -43,7 +49,8 @@ class MusicScanController(
                 sleeper = ScanSleeper { duration ->
                     try {
                         Thread.sleep(duration)
-                    } catch (_: InterruptedException) {
+                    } catch (error: InterruptedException) {
+                        ScannerLog.error("stability wait interrupted", error)
                         Thread.currentThread().interrupt()
                     }
                 },
@@ -52,11 +59,37 @@ class MusicScanController(
             )
             try {
                 scanner.scan(volumeIdentity, volumeRootPath, folderAbsolute)
-            } catch (_: Exception) {
+            } catch (error: Exception) {
+                ScannerLog.error("scan", error)
                 emit(
                     lastProgress.copy(phase = ScanPhase.INTERRUPTED)
                 )
             }
+        }
+    }
+
+    private fun logFolderFlags(folderAbsolute: String) {
+        val folder = File(folderAbsolute)
+        try {
+            ScannerLog.i("folder exists=${folder.exists()}")
+        } catch (error: Exception) {
+            ScannerLog.error("folder.exists", error)
+        }
+        try {
+            ScannerLog.i("folder isDirectory=${folder.isDirectory}")
+        } catch (error: Exception) {
+            ScannerLog.error("folder.isDirectory", error)
+        }
+        try {
+            ScannerLog.i("folder canRead=${folder.canRead()}")
+        } catch (error: Exception) {
+            ScannerLog.error("folder.canRead", error)
+        }
+        try {
+            ScannerLog.i("folder absolutePath=${folder.absolutePath}")
+        } catch (error: Exception) {
+            ScannerLog.error("folder.absolutePath", error)
+            ScannerLog.i("folder absolutePath=$folderAbsolute")
         }
     }
 

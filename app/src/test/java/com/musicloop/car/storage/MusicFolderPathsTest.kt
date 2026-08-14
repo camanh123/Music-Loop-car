@@ -27,6 +27,14 @@ class MusicFolderPathsTest {
     }
 
     @Test
+    fun relativePathIsCaseInsensitiveOnVolumePrefix() {
+        assertEquals(
+            "Music",
+            MusicFolderPaths.relativeToVolume("/storage/USB1", "/storage/usb1/Music")
+        )
+    }
+
+    @Test
     fun relativePathOutsideVolumeIsNull() {
         assertNull(MusicFolderPaths.relativeToVolume("/storage/USB1", "/storage/USB2/Music"))
     }

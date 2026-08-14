@@ -32,15 +32,17 @@ enum class ScanPhase {
 }
 
 /**
- * Retry / stability policy for Phase 3.
+ * Retry / stability policy for USB scanning.
  *
  * - Newly discovered or size/mtime-changed files enter WAITING_STABLE.
  * - Size is sampled, the scanner waits [STABILITY_WAIT_MS], then samples again.
  * - If size or mtime changed, the file is still being written: stay WAITING_STABLE,
- *   do not read metadata, and never mark UNPLAYABLE.
- * - Metadata/read failures on a *stable* file increment verifyFailures.
- * - After [MAX_STABLE_FAILURES] consecutive stable failures: UNPLAYABLE.
+ *   do not read metadata, and never discard the file.
+ * - Metadata extraction is enrichment only. Failure must still index a visible track
+ *   (READY + UNVERIFIED) and must not mark the track permanently UNPLAYABLE.
+ * - Playback capability is decided later by MediaPlayer, not by metadata tags.
  * - USB disappearance or scan cancel: INTERRUPTED; Room is not pruned.
+ * - An unreadable child directory is logged and skipped; the rest of the tree is scanned.
  */
 object ScanPolicy {
     const val STABILITY_WAIT_MS = 750L

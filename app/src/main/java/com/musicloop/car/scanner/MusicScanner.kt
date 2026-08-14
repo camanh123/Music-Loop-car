@@ -1,9 +1,13 @@
 package com.musicloop.car.scanner
 
 import com.musicloop.car.storage.MusicFolderPaths
+import java.io.File
 
 /**
  * Incremental, read-only USB music scanner.
+ *
+ * Discovery is independent of metadata extraction. A stable, readable, supported
+ * audio file is always indexed as a visible library track. Metadata is enrichment.
  *
  * Never writes to USB. Room/repository writes are the caller's internal storage.
  */
@@ -16,10 +20,14 @@ class MusicScanner(
     private val isCancelled: () -> Boolean,
     private val onProgress: (ScanProgress) -> Unit = {},
     private val stabilityWaitMs: Long = ScanPolicy.STABILITY_WAIT_MS,
+    @Suppress("UNUSED_PARAMETER")
     private val maxStableFailures: Int = ScanPolicy.MAX_STABLE_FAILURES
 ) {
 
     var metadataReadCount: Int = 0
+        private set
+
+    var lastDiagnostics: ScanDiagnostics = ScanDiagnostics()
         private set
 
     fun scan(
@@ -28,43 +36,131 @@ class MusicScanner(
         folderAbsolute: String
     ): ScanOutcome {
         metadataReadCount = 0
-        emit(ScanPhase.ENUMERATING)
+        var diagnostics = ScanDiagnostics(
+            volumeIdentity = volumeIdentity,
+            volumeRoot = volumeRoot,
+            folderAbsolute = folderAbsolute
+        )
+        lastDiagnostics = diagnostics
+
+        ScannerLog.i("SCAN_START")
+        ScannerLog.i("volumeIdentity=$volumeIdentity")
+        ScannerLog.i("volumeRoot=$volumeRoot")
+        ScannerLog.i("folderAbsolute=$folderAbsolute")
+
+        emit(ScanPhase.ENUMERATING, diagnostics = diagnostics)
         if (shouldAbort()) {
-            return interrupted(0, 0)
+            return interrupted(0, 0, diagnostics)
         }
 
         val enumerated = try {
             probe.listAudioFiles(folderAbsolute, volumeRoot)
-        } catch (_: Exception) {
-            return interrupted(0, 0)
+        } catch (error: Exception) {
+            ScannerLog.error("listAudioFiles", error)
+            diagnostics = diagnostics.copy(
+                folderExists = fileFlag { File(folderAbsolute).exists() },
+                folderIsDirectory = fileFlag { File(folderAbsolute).isDirectory },
+                folderCanRead = fileFlag { File(folderAbsolute).canRead() }
+            )
+            lastDiagnostics = diagnostics
+            return interrupted(0, 0, diagnostics)
+        }
+
+        diagnostics = diagnostics.copy(
+            folderExists = enumerated.folderExists,
+            folderIsDirectory = enumerated.folderIsDirectory,
+            folderCanRead = enumerated.folderCanRead,
+            folderAbsolute = enumerated.folderAbsolutePath.ifBlank { folderAbsolute },
+            totalFilesystemEntries = enumerated.totalFilesystemEntries,
+            audioCandidates = enumerated.audioCandidates,
+            acceptedAudioFiles = enumerated.acceptedAudioFiles,
+            rejectedFiles = enumerated.rejectedFiles
+        )
+        lastDiagnostics = diagnostics
+
+        if (enumerated.rootUnreadable) {
+            ScannerLog.w("scan root unreadable folderAbsolute=$folderAbsolute")
+            return interrupted(0, 0, diagnostics)
         }
 
         if (shouldAbort()) {
-            return interrupted(enumerated.size, 0)
+            return interrupted(enumerated.files.size, 0, diagnostics)
         }
 
-        val existing = repository.tracksForVolume(volumeIdentity).associateBy { it.relativePath }
+        val existingList = repository.tracksForVolume(volumeIdentity)
+        val existing = existingList.associateBy { it.relativePath }
+        diagnostics = diagnostics.copy(rowsBefore = existingList.size)
+        lastDiagnostics = diagnostics
+        ScannerLog.i("ROOM_RESULT rows before=${existingList.size}")
+
         val seen = mutableSetOf<String>()
         var processed = 0
+        var upserts = 0
+        var metadataOk = 0
+        var metadataFailed = 0
 
-        for (file in enumerated) {
+        for (file in enumerated.files) {
             if (shouldAbort()) {
-                return interrupted(enumerated.size, processed)
+                diagnostics = diagnostics.copy(
+                    metadataOk = metadataOk,
+                    metadataFailed = metadataFailed,
+                    rowsInsertedOrUpdated = upserts,
+                    rowsAfter = repository.tracksForVolume(volumeIdentity).size,
+                    libraryCount = repository.tracksForVolume(volumeIdentity).size
+                )
+                lastDiagnostics = diagnostics
+                return interrupted(enumerated.files.size, processed, diagnostics)
             }
             seen += file.relativePath
             processed += 1
-            emit(ScanPhase.CHECKING, processed, enumerated.size, volumeIdentity)
-            processFile(volumeIdentity, volumeRoot, file, existing[file.relativePath])
+            emit(
+                ScanPhase.CHECKING,
+                processed,
+                enumerated.files.size,
+                volumeIdentity,
+                diagnostics
+            )
+            val result = processFile(volumeIdentity, volumeRoot, file, existing[file.relativePath])
+            upserts += result.upserts
+            metadataOk += if (result.metadataSuccess == true) 1 else 0
+            metadataFailed += if (result.metadataSuccess == false) 1 else 0
         }
 
         if (shouldAbort()) {
-            return interrupted(enumerated.size, processed)
+            diagnostics = diagnostics.copy(
+                metadataOk = metadataOk,
+                metadataFailed = metadataFailed,
+                rowsInsertedOrUpdated = upserts,
+                rowsAfter = repository.tracksForVolume(volumeIdentity).size,
+                libraryCount = repository.tracksForVolume(volumeIdentity).size
+            )
+            lastDiagnostics = diagnostics
+            return interrupted(enumerated.files.size, processed, diagnostics)
         }
 
         val folderRelative = MusicFolderPaths.relativeToVolume(volumeRoot, folderAbsolute) ?: ""
         repository.removeConfirmedMissing(volumeIdentity, folderRelative, seen)
-        emit(ScanPhase.COMPLETE, processed, enumerated.size, volumeIdentity)
-        return ScanOutcome(ScanPhase.COMPLETE, enumerated.size, processed)
+
+        val after = repository.tracksForVolume(volumeIdentity)
+        diagnostics = diagnostics.copy(
+            metadataOk = metadataOk,
+            metadataFailed = metadataFailed,
+            rowsInsertedOrUpdated = upserts,
+            rowsAfter = after.size,
+            libraryCount = after.size,
+            acceptedAudioFiles = enumerated.acceptedAudioFiles
+        )
+        lastDiagnostics = diagnostics
+
+        ScannerLog.i(
+            "ROOM_RESULT rows before=${diagnostics.rowsBefore} " +
+                "rows inserted/updated=$upserts rows after=${after.size}"
+        )
+        ScannerLog.i("LIBRARY_RESULT volumeIdentity=$volumeIdentity track count=${after.size}")
+        ScannerLog.i(diagnostics.formatSummary().replace('\n', ' '))
+
+        emit(ScanPhase.COMPLETE, processed, enumerated.files.size, volumeIdentity, diagnostics)
+        return ScanOutcome(ScanPhase.COMPLETE, enumerated.files.size, processed)
     }
 
     private fun processFile(
@@ -72,8 +168,9 @@ class MusicScanner(
         volumeRoot: String,
         file: DiscoveredFile,
         existing: AudioTrack?
-    ) {
-        val absolute = MusicFolderPaths.join(volumeRoot, file.relativePath)
+    ): ProcessResult {
+        val storedAbsolute = MusicFolderPaths.join(volumeRoot, file.relativePath)
+        val readPath = file.absolutePath?.takeIf { it.isNotBlank() } ?: storedAbsolute
         val current = existing
         val unchanged = current != null &&
             current.fileSize == file.size &&
@@ -85,34 +182,36 @@ class MusicScanner(
         if (current != null && unchanged) {
             repository.upsert(
                 current.copy(
-                    absolutePath = absolute,
+                    absolutePath = storedAbsolute,
                     lastVerifiedAt = clock.now(),
                     updatedAt = clock.now(),
                     missingConfirmed = false
                 )
             )
-            return
+            return ProcessResult(upserts = 1, metadataSuccess = null)
         }
 
-        val discovered = baseTrack(volumeIdentity, absolute, file, existing).copy(
+        val discovered = baseTrack(volumeIdentity, storedAbsolute, file, existing).copy(
             scanState = ScanState.DISCOVERED,
             metadataState = existing?.metadataState ?: MetadataState.METADATA_PENDING
         )
         repository.upsert(discovered)
 
-        val first = probe.snapshot(absolute)
+        val first = probe.snapshot(readPath)
         if (first == null || !first.exists) {
-            return
+            ScannerLog.w("snapshot missing after discover filename=${file.filename}")
+            return ProcessResult(upserts = 1, metadataSuccess = null)
         }
         if (stabilityWaitMs > 0L) {
             sleeper.sleep(stabilityWaitMs)
         }
         if (shouldAbort()) {
-            return
+            return ProcessResult(upserts = 1, metadataSuccess = null)
         }
-        val second = probe.snapshot(absolute)
+        val second = probe.snapshot(readPath)
         if (second == null || !second.exists) {
-            return
+            ScannerLog.w("second snapshot missing filename=${file.filename}")
+            return ProcessResult(upserts = 1, metadataSuccess = null)
         }
         if (first.size != second.size || first.lastModified != second.lastModified) {
             repository.upsert(
@@ -124,7 +223,8 @@ class MusicScanner(
                     updatedAt = clock.now()
                 )
             )
-            return
+            ScannerLog.i("WAITING_STABLE filename=${file.filename} size ${first.size}->${second.size}")
+            return ProcessResult(upserts = 2, metadataSuccess = null)
         }
 
         val verifying = discovered.copy(
@@ -137,31 +237,55 @@ class MusicScanner(
 
         metadataReadCount += 1
         val meta = try {
-            metadataReader.read(absolute)
-        } catch (_: Exception) {
-            MetadataResult(success = false)
+            metadataReader.read(readPath)
+        } catch (error: Exception) {
+            ScannerLog.error("metadataReader ${file.filename}", error)
+            MetadataResult(
+                success = false,
+                errorClass = error.javaClass.name,
+                errorMessage = error.message
+            )
         }
 
         if (shouldAbort()) {
-            return
+            return ProcessResult(upserts = 2, metadataSuccess = null)
         }
+
+        val fallbackTitle = FilenameTitleParser.titleFromFilename(file.filename)
 
         if (!meta.success) {
-            val failures = (existing?.verifyFailures ?: 0) + 1
-            val unplayable = failures >= maxStableFailures
+            ScannerLog.i(
+                "METADATA_RESULT filename=${file.filename} failure duration=null " +
+                    "class=${meta.errorClass ?: "-"} message=${meta.errorMessage ?: "-"}"
+            )
+            if (meta.errorClass != null || meta.errorMessage != null) {
+                ScannerLog.error(
+                    "metadata ${file.filename}",
+                    meta.errorClass,
+                    meta.errorMessage
+                )
+            }
+            // Metadata is enrichment. The file remains a visible, playable-attempt library row.
             repository.upsert(
                 verifying.copy(
-                    scanState = if (unplayable) ScanState.UNPLAYABLE else ScanState.ERROR,
-                    metadataState = if (unplayable) MetadataState.UNPLAYABLE else MetadataState.UNVERIFIED,
-                    verifyFailures = failures,
+                    title = fallbackTitle,
+                    artist = existing?.artist.orEmpty(),
+                    album = existing?.album.orEmpty(),
+                    scanState = ScanState.READY,
+                    metadataState = MetadataState.UNVERIFIED,
+                    playableState = PlayableState.UNKNOWN,
                     lastVerifiedAt = clock.now(),
-                    updatedAt = clock.now()
+                    updatedAt = clock.now(),
+                    missingConfirmed = false
                 )
             )
-            return
+            return ProcessResult(upserts = 3, metadataSuccess = false)
         }
 
-        val title = meta.title?.takeIf { it.isNotBlank() } ?: FilenameTitleParser.titleFromFilename(file.filename)
+        ScannerLog.i(
+            "METADATA_RESULT filename=${file.filename} success duration=${meta.durationMs ?: "-"}"
+        )
+        val title = meta.title?.takeIf { it.isNotBlank() } ?: fallbackTitle
         repository.upsert(
             verifying.copy(
                 title = title,
@@ -180,6 +304,7 @@ class MusicScanner(
                 missingConfirmed = false
             )
         )
+        return ProcessResult(upserts = 3, metadataSuccess = true)
     }
 
     private fun baseTrack(
@@ -220,8 +345,9 @@ class MusicScanner(
         return isCancelled() || !probe.isVolumePresent()
     }
 
-    private fun interrupted(total: Int, processed: Int): ScanOutcome {
-        emit(ScanPhase.INTERRUPTED, processed, total)
+    private fun interrupted(total: Int, processed: Int, diagnostics: ScanDiagnostics): ScanOutcome {
+        lastDiagnostics = diagnostics
+        emit(ScanPhase.INTERRUPTED, processed, total, diagnostics.volumeIdentity, diagnostics)
         return ScanOutcome(ScanPhase.INTERRUPTED, total, processed)
     }
 
@@ -229,7 +355,8 @@ class MusicScanner(
         phase: ScanPhase,
         processed: Int = 0,
         total: Int = 0,
-        volumeIdentity: String? = null
+        volumeIdentity: String? = null,
+        diagnostics: ScanDiagnostics = lastDiagnostics
     ) {
         val tracks = volumeIdentity?.let { repository.tracksForVolume(it) }.orEmpty()
         onProgress(
@@ -244,8 +371,23 @@ class MusicScanner(
                         it.metadataState == MetadataState.METADATA_PENDING
                 },
                 unplayableCount = tracks.count { it.isUnplayable },
-                indexedCount = tracks.size
+                indexedCount = tracks.size,
+                diagnostics = diagnostics.copy(libraryCount = tracks.size)
             )
         )
     }
+
+    private fun fileFlag(block: () -> Boolean): Boolean {
+        return try {
+            block()
+        } catch (error: Exception) {
+            ScannerLog.error("fileFlag", error)
+            false
+        }
+    }
+
+    private data class ProcessResult(
+        val upserts: Int,
+        val metadataSuccess: Boolean?
+    )
 }

@@ -70,6 +70,23 @@ class MusicFolderResolverTest {
     }
 
     @Test
+    fun unlabeledSavedIdentityRestoresOnUsb2() {
+        val saved = MusicFolderRecord(
+            absolutePath = "/storage/USB1/Music",
+            relativePath = "Music",
+            volumeUuid = UsbVolume.UNLABELED_USB_IDENTITY,
+            volumeLabel = "USB DISK",
+            folderName = "Music"
+        )
+        val usb2 = UsbVolume(null, "USB DISK", "/storage/USB2", "mounted", true)
+        val dirs = setOf("/storage/USB2", "/storage/USB2/Music")
+        val resolver = MusicFolderResolver { dirs.contains(it) }
+        val found = resolver.resolve(saved, listOf(usb2)) as FolderResolveResult.Found
+        assertEquals("/storage/USB2/Music", found.absolutePath)
+        assertEquals(UsbVolume.UNLABELED_USB_IDENTITY, found.record.volumeUuid)
+    }
+
+    @Test
     fun relativeMatchWithoutUuidWhenSingleVolume() {
         val saved = savedMusic.copy(volumeUuid = null)
         val dirs = setOf("/storage/USB2", "/storage/USB2/Music")
