@@ -25,8 +25,13 @@ class ResumeValidatorTest {
         assertEquals(0, ResumeValidator.clampPosition(-1, 180_000))
         assertEquals(0, ResumeValidator.clampPosition(180_000, 180_000))
         assertEquals(0, ResumeValidator.clampPosition(200_000, 180_000))
-        assertEquals(0, ResumeValidator.clampPosition(84_000, null as Int?))
-        assertEquals(0, ResumeValidator.clampPosition(84_000, 0))
+    }
+
+    @Test
+    fun unknownDurationKeepsNonNegativeSavedPosition() {
+        assertEquals(84_000, ResumeValidator.clampPosition(84_000, null as Int?))
+        assertEquals(84_000, ResumeValidator.clampPosition(84_000, 0))
+        assertEquals(0, ResumeValidator.clampPosition(-5, null as Int?))
     }
 
     @Test
@@ -45,6 +50,7 @@ class ResumeValidatorTest {
             "Music/new.mp3"
         )
         assertFalse(same)
-        assertEquals(0, ResumeValidator.clampPosition(84_000, if (same) 180_000 else 0))
+        val restoredPosition = if (same) ResumeValidator.clampPosition(84_000, 180_000) else 0
+        assertEquals(0, restoredPosition)
     }
 }

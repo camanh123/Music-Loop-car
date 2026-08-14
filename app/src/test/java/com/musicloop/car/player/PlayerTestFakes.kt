@@ -1,7 +1,7 @@
 package com.musicloop.car.player
 
 class FakePlayerEngine : PlayerEngine {
-    var listener: PlayerEngineListener? = null
+    var engineListener: PlayerEngineListener? = null
     var lastPath: String? = null
     var playing: Boolean = false
     var positionMs: Int = 0
@@ -13,7 +13,7 @@ class FakePlayerEngine : PlayerEngine {
     var startCount: Int = 0
 
     override fun setListener(listener: PlayerEngineListener?) {
-        this.listener = listener
+        this.engineListener = listener
     }
 
     override fun prepare(absolutePath: String) {
@@ -21,11 +21,11 @@ class FakePlayerEngine : PlayerEngine {
         released = false
         stopped = false
         if (failPrepare) {
-            listener?.onError(PlaybackErrors.prepareFailed("prepare failed"))
+            engineListener?.onError(PlaybackErrors.prepareFailed("prepare failed"))
             return
         }
         if (autoPrepare) {
-            listener?.onPrepared(durationMs)
+            engineListener?.onPrepared(durationMs)
         }
     }
 
@@ -64,13 +64,13 @@ class FakePlayerEngine : PlayerEngine {
 
     fun complete() {
         playing = false
-        listener?.onCompletion()
+        engineListener?.onCompletion()
     }
 
     fun error(error: PlaybackError) {
         playing = false
         released = true
-        listener?.onError(error)
+        engineListener?.onError(error)
     }
 }
 

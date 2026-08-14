@@ -259,7 +259,7 @@ class PlaybackController(
         current = item
         currentIndex = index
         durationMs = item.durationMs?.toInt()?.coerceAtLeast(0) ?: 0
-        pendingSeekMs = ResumeValidator.clampPosition(resumeFromMs, durationMs.takeIf { it > 0 } ?: item.durationMs)
+        pendingSeekMs = ResumeValidator.clampPosition(resumeFromMs, durationMs.takeIf { it > 0 })
         positionMs = pendingSeekMs
         error = null
         message = PlaybackMessage.PREPARING
@@ -442,7 +442,7 @@ class PlaybackController(
         durationMs = saved.durationMs
         pendingSeekMs = ResumeValidator.clampPosition(
             saved.positionMs,
-            durationMs.takeIf { it > 0 } ?: item.durationMs
+            durationMs.takeIf { it > 0 }
         )
         positionMs = pendingSeekMs
         if (state != PlayerState.USB_DISCONNECTED) {

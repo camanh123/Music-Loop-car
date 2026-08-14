@@ -22,20 +22,19 @@ object ResumeValidator {
     }
 
     /**
-     * Clamp to 0 <= position < duration. Invalid or unknown duration starts at 0.
+     * When duration is known: clamp to 0 <= position < duration.
+     * When duration is unknown: keep a non-negative saved position for later clamping.
      */
     fun clampPosition(savedMs: Int, durationMs: Int?): Int {
-        if (durationMs == null || durationMs <= 0) {
+        if (savedMs < 0) {
             return 0
         }
-        if (savedMs < 0 || savedMs >= durationMs) {
+        if (durationMs == null || durationMs <= 0) {
+            return savedMs
+        }
+        if (savedMs >= durationMs) {
             return 0
         }
         return savedMs
-    }
-
-    fun clampPosition(savedMs: Int, durationMs: Long?): Int {
-        val duration = durationMs?.coerceAtMost(Int.MAX_VALUE.toLong())?.toInt()
-        return clampPosition(savedMs, duration)
     }
 }
