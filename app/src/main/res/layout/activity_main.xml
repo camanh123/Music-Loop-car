@@ -154,4 +154,80 @@
                 android:textSize="14sp" />
         </ScrollView>
     </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/audioPlayerBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/bg_panel"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/nowPlayingTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/player_idle"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/nowPlayingArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/nowPlayingPosition"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/player_position_placeholder"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <SeekBar
+            android:id="@+id/audioSeekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/buttonPrevious"
+                style="@style/Widget.MusicLoopCar.TransportButton"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="@string/previous" />
+
+            <Button
+                android:id="@+id/buttonPlayPause"
+                style="@style/Widget.MusicLoopCar.TransportButton"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:text="@string/play" />
+
+            <Button
+                android:id="@+id/buttonNext"
+                style="@style/Widget.MusicLoopCar.TransportButton"
+                android:layout_width="0dp"
+                android:layout_height="@dimen/button_height"
+                android:layout_weight="1"
+                android:text="@string/next" />
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>

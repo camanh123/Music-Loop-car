@@ -12,8 +12,8 @@ android {
         applicationId = "com.musicloop.car"
         minSdk = 29
         targetSdk = 29
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     testOptions {
@@ -67,6 +67,8 @@ dependencies {
     implementation("androidx.room:room-runtime:2.5.2")
     implementation("androidx.room:room-ktx:2.5.2")
     kapt("androidx.room:room-compiler:2.5.2")
+    implementation("androidx.media3:media3-exoplayer:1.1.1")
+    implementation("androidx.media3:media3-ui:1.1.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

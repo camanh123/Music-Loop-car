@@ -35,7 +35,8 @@ class UsbLifecycleController(
     private val scanner: LibraryMediaScanner,
     private val repository: LibraryRepository,
     private val scope: CoroutineScope,
-    private val now: () -> Long = { System.currentTimeMillis() }
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val onOnlineVolumesChanged: (Set<String>) -> Unit = {}
 ) {
     private val _uiState = MutableStateFlow(LibraryUiState(statusMessage = "Idle"))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
@@ -261,6 +262,11 @@ class UsbLifecycleController(
                 // Isolated per volume.
             }
         }
+        try {
+            onOnlineVolumesChanged(onlineIds)
+        } catch (_: Exception) {
+            // Playback notification must not break USB lifecycle.
+        }
     }
 
     private fun snapshotVolumesSafe(): List<VolumeSnapshot> {
@@ -284,6 +290,11 @@ class UsbLifecycleController(
                 lastKnownRootPath = current.lastKnownRootPath
             )
         }
+        try {
+            onOnlineVolumesChanged(emptySet())
+        } catch (_: Exception) {
+            // Playback notification must not break USB lifecycle.
+        }
     }
 
     private fun applyLibrarySnapshot(snapshot: LibrarySnapshot) {
@@ -291,7 +302,10 @@ class UsbLifecycleController(
         val rows = snapshot.media.take(LibraryScanPolicy.UI_LIST_LIMIT).map { item ->
             MediaListRow(
                 id = item.id,
+                volumeId = item.volumeId,
+                relativePath = item.relativePath,
                 fileName = item.fileName,
+                extension = item.extension,
                 mediaType = item.mediaType,
                 sizeBytes = item.sizeBytes,
                 durationMs = item.durationMs,

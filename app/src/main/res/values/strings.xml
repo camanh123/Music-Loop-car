@@ -2,11 +2,20 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2A — read-only USB scan and Room library. No playback.</string>
+    <string name="header_subtitle">Phase 2B — USB library plus Media3 local playback. USB stays read-only.</string>
+    <string name="report_placeholder">Nhấn SCAN / RESCAN để xây thư viện. Chạm audio để phát, chạm video để mở PlayerView.\n\nUSB chỉ được đọc. Không ghi, không SAF, không background service.</string>
+    <string name="play">PLAY</string>
+    <string name="pause">PAUSE</string>
+    <string name="previous">PREV</string>
+    <string name="next">NEXT</string>
+    <string name="close">CLOSE</string>
+    <string name="player_idle">No track</string>
+    <string name="player_position_placeholder">0:00 / 0:00</string>
+    <string name="playback_offline">USB offline — cannot play</string>
+    <string name="playback_error">Playback error: %1$s</string>
     <string name="scan_usb_capability">QUÉT KHẢ NĂNG ĐỌC USB</string>
     <string name="scan_rescan">SCAN / RESCAN</string>
     <string name="scan_running">Đang quét StorageVolume (chỉ đọc)…</string>
-    <string name="report_placeholder">Nhấn SCAN / RESCAN để xây thư viện, hoặc QUÉT KHẢ NĂNG ĐỌC USB cho báo cáo Phase 1.\n\nUSB chỉ được đọc. Không phát, không ghi, không SAF.</string>
     <string name="permission_required">Cần quyền đọc bộ nhớ để kiểm tra USB.</string>
     <string name="usb_online">USB: Online</string>
     <string name="usb_offline">USB: Offline</string>

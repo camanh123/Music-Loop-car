@@ -6,9 +6,12 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import com.musicloop.car.database.AppDatabase
+import com.musicloop.car.database.LibraryRepository
 import com.musicloop.car.database.RoomLibraryRepository
 import com.musicloop.car.library.AndroidMetadataReader
 import com.musicloop.car.library.LibraryMediaScanner
+import com.musicloop.car.playback.Media3PlayerManager
+import com.musicloop.car.playback.MediaItemResolver
 import com.musicloop.car.storage.UsbStorageManager
 import com.musicloop.car.usb.UsbLifecycleController
 import com.musicloop.car.usb.UsbMountReceiver
@@ -21,7 +24,13 @@ class MusicLoopApp : Application() {
     lateinit var database: AppDatabase
         private set
 
+    lateinit var repository: LibraryRepository
+        private set
+
     lateinit var lifecycleController: UsbLifecycleController
+        private set
+
+    lateinit var playerManager: Media3PlayerManager
         private set
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -30,7 +39,7 @@ class MusicLoopApp : Application() {
     override fun onCreate() {
         super.onCreate()
         database = AppDatabase.create(this)
-        val repository = RoomLibraryRepository(database)
+        repository = RoomLibraryRepository(database)
         val storage = UsbStorageManager(this)
         val scanner = LibraryMediaScanner(
             repository = repository,
@@ -40,6 +49,17 @@ class MusicLoopApp : Application() {
             snapshotVolumes = { storage.snapshotVolumes() },
             scanner = scanner,
             repository = repository,
+            scope = applicationScope,
+            onOnlineVolumesChanged = { ids ->
+                if (this::playerManager.isInitialized) {
+                    playerManager.onOnlineVolumesChanged(ids)
+                }
+            }
+        )
+        playerManager = Media3PlayerManager(
+            context = this,
+            repository = repository,
+            resolver = MediaItemResolver(snapshotVolumes = { storage.snapshotVolumes() }),
             scope = applicationScope
         )
         registerMountReceiver()
