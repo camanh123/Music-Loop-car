@@ -14,4 +14,6 @@
     <color name="unplayable_dim">#66F4F7FB</color>
     <color name="launcher_background">#0D1B2A</color>
     <color name="launcher_foreground">#E0A100</color>
+    <color name="status_online">#3DDC84</color>
+    <color name="status_offline">#E85D4C</color>
 </resources>

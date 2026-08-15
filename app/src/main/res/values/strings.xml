@@ -1,10 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MusicLoop Car</string>
-    <string name="header_title">USB CAPABILITY PoC</string>
-    <string name="header_subtitle">CARFU Android 10 — read-only StorageVolume benchmark</string>
+    <string name="header_title">USB LIBRARY</string>
+    <string name="header_subtitle">Phase 2A — read-only USB scan and Room library. No playback.</string>
     <string name="scan_usb_capability">QUÉT KHẢ NĂNG ĐỌC USB</string>
+    <string name="scan_rescan">SCAN / RESCAN</string>
     <string name="scan_running">Đang quét StorageVolume (chỉ đọc)…</string>
-    <string name="report_placeholder">Nhấn QUÉT KHẢ NĂNG ĐỌC USB để tạo báo cáo.\n\nUSB chỉ được đọc. Không ghi, không xóa, không SAF.</string>
+    <string name="report_placeholder">Nhấn SCAN / RESCAN để xây thư viện, hoặc QUÉT KHẢ NĂNG ĐỌC USB cho báo cáo Phase 1.\n\nUSB chỉ được đọc. Không phát, không ghi, không SAF.</string>
     <string name="permission_required">Cần quyền đọc bộ nhớ để kiểm tra USB.</string>
+    <string name="usb_online">USB: Online</string>
+    <string name="usb_offline">USB: Offline</string>
+    <string name="volume_label">Volume: %1$s</string>
+    <string name="volume_unknown">—</string>
+    <string name="volume_unknown_label">Volume: —</string>
+    <string name="state_idle">Idle</string>
+    <string name="state_detecting">Detecting USB</string>
+    <string name="state_scanning">Scanning</string>
+    <string name="state_completed">Completed</string>
+    <string name="state_failed">Failed</string>
+    <string name="state_usb_offline">USB Offline</string>
+    <string name="scan_progress_count">Scanning… %1$d / %2$d files</string>
+    <string name="scan_progress_unknown">Scanning…</string>
+    <string name="scan_progress_percent">%1$d%%</string>
+    <string name="scan_progress_placeholder">0%</string>
+    <string name="library_counts">Audio: %1$d    Video: %2$d    Total: %3$d</string>
+    <string name="library_counts_placeholder">Audio: 0    Video: 0    Total: 0</string>
 </resources>

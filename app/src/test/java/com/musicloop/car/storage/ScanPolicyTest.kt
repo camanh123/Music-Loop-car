@@ -29,4 +29,12 @@ class ScanPolicyTest {
         assertFalse(ScanPolicy.isHiddenName("Music"))
         assertFalse(ScanPolicy.isHiddenName("song.mp3"))
     }
+
+    @Test
+    fun phase1LimitsStayCappedForCapabilityPoc() {
+        assertTrue(ScanPolicy.MAX_DEPTH == 3)
+        assertTrue(ScanPolicy.MAX_FILES == 50)
+        assertTrue(LibraryScanPolicy.MAX_FILES > ScanPolicy.MAX_FILES)
+        assertTrue(LibraryScanPolicy.MAX_DEPTH > ScanPolicy.MAX_DEPTH)
+    }
 }

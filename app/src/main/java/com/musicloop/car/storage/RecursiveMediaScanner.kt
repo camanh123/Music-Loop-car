@@ -1,10 +1,9 @@
 package com.musicloop.car.storage
 
 import java.io.File
-import java.nio.file.Files
 
 /**
- * Read-only recursive media scan for removable USB volumes.
+ * Read-only recursive media scan for removable USB volumes (Phase 1 PoC).
  *
  * Does not follow symlinks, does not enter hidden directories, does not scan
  * internal /data /system /emulated roots. Caps depth and file count.
@@ -51,6 +50,14 @@ class RecursiveMediaScanner(
     private val maxFiles: Int = ScanPolicy.MAX_FILES,
     private val sampleLimit: Int = ScanPolicy.SAMPLE_LIMIT
 ) {
+    private val enumerator = MediaEnumerator(
+        listChildren = listChildren,
+        isDirectory = isDirectory,
+        isSymlink = isSymlink,
+        fileName = fileName,
+        fileLength = fileLength,
+        filePath = filePath
+    )
 
     fun scan(root: File): MediaScanResult {
         val rootPath = filePath(root)
@@ -62,67 +69,26 @@ class RecursiveMediaScanner(
         val samples = mutableListOf<MediaReadSample>()
         var audioCount = 0
         var videoCount = 0
-        var collected = 0
 
-        fun walk(dir: File, depth: Int) {
-            if (collected >= maxFiles) {
-                return
+        val result = enumerator.collect(root, maxDepth, maxFiles)
+        for (item in result.files) {
+            val pass = readProbe(item.file)
+            if (item.mediaType == MediaKind.AUDIO) {
+                audioCount += 1
+                audioByExt[item.extension] = (audioByExt[item.extension] ?: 0) + 1
+            } else {
+                videoCount += 1
+                videoByExt[item.extension] = (videoByExt[item.extension] ?: 0) + 1
             }
-            if (depth > maxDepth) {
-                return
-            }
-            val path = filePath(dir)
-            if (ScanPolicy.isForbiddenScanRoot(path)) {
-                return
-            }
-            // Volume roots on CARFU are often mount symlinks (USB1 -> media_rw).
-            // Skip symlink *children* only; still list the StorageManager root.
-            if (depth > 0 && isSymlink(dir)) {
-                return
-            }
-            val children = listChildren(dir) ?: return
-            for (child in children) {
-                if (collected >= maxFiles) {
-                    return
-                }
-                val name = fileName(child)
-                if (name.isEmpty() || name == "." || name == "..") {
-                    continue
-                }
-                if (ScanPolicy.isHiddenName(name)) {
-                    continue
-                }
-                if (isSymlink(child)) {
-                    continue
-                }
-                if (isDirectory(child)) {
-                    walk(child, depth + 1)
-                    continue
-                }
-                val kind = MediaExtensions.kindOf(name) ?: continue
-                val ext = MediaExtensions.extensionOf(name) ?: continue
-                val pass = readProbe(child)
-                val size = fileLength(child)
-                if (kind == MediaKind.AUDIO) {
-                    audioCount += 1
-                    audioByExt[ext] = (audioByExt[ext] ?: 0) + 1
-                } else {
-                    videoCount += 1
-                    videoByExt[ext] = (videoByExt[ext] ?: 0) + 1
-                }
-                if (samples.size < sampleLimit) {
-                    samples += MediaReadSample(
-                        absolutePath = filePath(child),
-                        kind = kind,
-                        sizeBytes = size,
-                        streamReadPass = pass
-                    )
-                }
-                collected += 1
+            if (samples.size < sampleLimit) {
+                samples += MediaReadSample(
+                    absolutePath = filePath(item.file),
+                    kind = item.mediaType,
+                    sizeBytes = item.sizeBytes,
+                    streamReadPass = pass
+                )
             }
         }
-
-        walk(root, 0)
         return MediaScanResult(
             audioCount = audioCount,
             videoCount = videoCount,
@@ -134,23 +100,6 @@ class RecursiveMediaScanner(
     }
 
     companion object {
-        fun isSymbolicLink(file: File): Boolean {
-            try {
-                if (Files.isSymbolicLink(file.toPath())) {
-                    return true
-                }
-            } catch (_: Exception) {
-                // android.jar unit-test stubs may no-op NIO; fall through.
-            }
-            return try {
-                val parent = file.parentFile ?: return false
-                val canonicalChild = file.canonicalFile
-                val canonicalParent = parent.canonicalFile
-                canonicalChild.parentFile != canonicalParent ||
-                    !canonicalChild.name.equals(file.name, ignoreCase = false)
-            } catch (_: Exception) {
-                false
-            }
-        }
+        fun isSymbolicLink(file: File): Boolean = MediaEnumerator.isSymbolicLink(file)
     }
 }

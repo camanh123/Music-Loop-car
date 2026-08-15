@@ -26,7 +26,12 @@ class UsbWriteSafetyAuditTest {
         "openFileOutput(",
         "ACTION_OPEN_DOCUMENT_TREE",
         "ACTION_OPEN_DOCUMENT",
-        "DocumentsContract"
+        "DocumentsContract",
+        "androidx.media3",
+        "com.google.android.exoplayer2",
+        "android.media.MediaPlayer",
+        "MediaSessionService",
+        "androidx.media.session"
     )
 
     private val forbiddenPaths = listOf(
@@ -81,7 +86,7 @@ class UsbWriteSafetyAuditTest {
             !Regex("""<uses-permission[^>]*WRITE_EXTERNAL_STORAGE""").containsMatchIn(manifest)
         )
         assertTrue(
-            "FOREGROUND_SERVICE must not be requested in Phase 1",
+            "FOREGROUND_SERVICE must not be requested in Phase 2A",
             !Regex("""<uses-permission[^>]*FOREGROUND_SERVICE""").containsMatchIn(manifest)
         )
         assertTrue(

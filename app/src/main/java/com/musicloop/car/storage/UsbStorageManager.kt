@@ -3,7 +3,6 @@ package com.musicloop.car.storage
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
-import android.os.Environment
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import java.io.File
@@ -12,7 +11,8 @@ import java.io.File
  * Enumerates every StorageVolume the system reports. Read-only.
  *
  * Does not hard-code USB1/USB2. Does not use SAF / DocumentsUI.
- * Media recursion runs only on removable volumes whose state is mounted.
+ * Media recursion for the Phase 1 PoC runs only on removable mounted volumes.
+ * Phase 2A library scans use [snapshotVolumes] plus LibraryMediaScanner.
  */
 class UsbStorageManager(
     context: Context,
@@ -20,7 +20,7 @@ class UsbStorageManager(
 ) {
     private val appContext = context.applicationContext
 
-    fun inspectAllVolumes(): List<VolumeReport> {
+    fun snapshotVolumes(): List<VolumeSnapshot> {
         val storageManager = appContext.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
             ?: return emptyList()
         val volumes = try {
@@ -28,10 +28,16 @@ class UsbStorageManager(
         } catch (_: Exception) {
             emptyList()
         }
-        return volumes.mapIndexed { index, volume -> inspectVolume(index + 1, volume) }
+        return volumes.map { volume -> snapshotVolume(volume) }
     }
 
-    private fun inspectVolume(index: Int, volume: StorageVolume): VolumeReport {
+    fun inspectAllVolumes(): List<VolumeReport> {
+        return snapshotVolumes().mapIndexed { index, snapshot ->
+            inspectSnapshot(index + 1, snapshot)
+        }
+    }
+
+    fun snapshotVolume(volume: StorageVolume): VolumeSnapshot {
         val description = try {
             volume.getDescription(appContext)?.takeIf { it.isNotBlank() } ?: "N/A"
         } catch (_: Exception) {
@@ -67,7 +73,6 @@ class UsbStorageManager(
         } catch (_: Exception) {
             null
         }
-        val listFilesNonNull = listed != null
         val totalSpace = try {
             root?.totalSpace ?: 0L
         } catch (_: Exception) {
@@ -78,57 +83,59 @@ class UsbStorageManager(
         } catch (_: Exception) {
             0L
         }
-
-        val forbiddenRoot = ScanPolicy.isForbiddenScanRoot(rootPath.orEmpty())
-        val shouldScan = removable && isMounted(state) && root != null && listFilesNonNull && !forbiddenRoot
-        val media = if (shouldScan && root != null) {
-            try {
-                scanner.scan(root)
-            } catch (_: Exception) {
-                MediaScanResult(scanned = false, skipReason = "scan error")
-            }
-        } else {
-            val reason = when {
-                !removable -> "not removable"
-                !isMounted(state) -> "not mounted"
-                root == null -> "root unresolved"
-                forbiddenRoot -> "internal/forbidden"
-                else -> "directory not listable"
-            }
-            MediaScanResult(scanned = false, skipReason = reason)
-        }
-
-        val checks = VerificationChecks.evaluate(
-            volumePresent = true,
-            rootPath = rootPath,
-            exists = exists,
-            isDirectory = isDirectory,
-            canRead = canRead,
-            listFilesNonNull = listFilesNonNull,
-            mediaFilesReadable = media.mediaFilesReadable
-        )
-        return VolumeReport(
-            index = index,
+        return VolumeSnapshot(
             description = description,
             state = state,
-            removableCandidate = removable,
+            removable = removable,
             isPrimary = primary,
             uuid = uuid,
             rootPath = rootPath,
             exists = exists,
-            canRead = canRead,
             isDirectory = isDirectory,
-            listFilesNonNull = listFilesNonNull,
+            canRead = canRead,
+            listFilesNonNull = listed != null,
             totalSpaceBytes = totalSpace,
-            freeSpaceBytes = freeSpace,
-            checks = checks,
-            media = media
+            freeSpaceBytes = freeSpace
         )
     }
 
-    private fun isMounted(state: String): Boolean {
-        return state == Environment.MEDIA_MOUNTED ||
-            state == Environment.MEDIA_MOUNTED_READ_ONLY
+    private fun inspectSnapshot(index: Int, snapshot: VolumeSnapshot): VolumeReport {
+        val shouldScan = snapshot.scannable
+        val media = if (shouldScan && snapshot.rootPath != null) {
+            try {
+                scanner.scan(File(snapshot.rootPath))
+            } catch (_: Exception) {
+                MediaScanResult(scanned = false, skipReason = "scan error")
+            }
+        } else {
+            MediaScanResult(scanned = false, skipReason = snapshot.skipReason)
+        }
+        val checks = VerificationChecks.evaluate(
+            volumePresent = true,
+            rootPath = snapshot.rootPath,
+            exists = snapshot.exists,
+            isDirectory = snapshot.isDirectory,
+            canRead = snapshot.canRead,
+            listFilesNonNull = snapshot.listFilesNonNull,
+            mediaFilesReadable = media.mediaFilesReadable
+        )
+        return VolumeReport(
+            index = index,
+            description = snapshot.description,
+            state = snapshot.state,
+            removableCandidate = snapshot.removable,
+            isPrimary = snapshot.isPrimary,
+            uuid = snapshot.uuid,
+            rootPath = snapshot.rootPath,
+            exists = snapshot.exists,
+            canRead = snapshot.canRead,
+            isDirectory = snapshot.isDirectory,
+            listFilesNonNull = snapshot.listFilesNonNull,
+            totalSpaceBytes = snapshot.totalSpaceBytes,
+            freeSpaceBytes = snapshot.freeSpaceBytes,
+            checks = checks,
+            media = media
+        )
     }
 
     /**
