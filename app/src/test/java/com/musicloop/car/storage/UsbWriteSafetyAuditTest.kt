@@ -23,11 +23,19 @@ class UsbWriteSafetyAuditTest {
         "DocumentFile.createFile",
         "DocumentFile.delete",
         "DocumentFile.renameTo",
-        "openFileOutput("
+        "openFileOutput(",
+        "ACTION_OPEN_DOCUMENT_TREE",
+        "ACTION_OPEN_DOCUMENT",
+        "DocumentsContract"
+    )
+
+    private val forbiddenPaths = listOf(
+        "/storage/USB1",
+        "/storage/USB2"
     )
 
     @Test
-    fun productionSourcesMustNotContainUsbWriteApis() {
+    fun productionSourcesMustNotContainUsbWriteApisOrHardcodedUsbPaths() {
         val roots = listOf(
             File("src/main/java"),
             File("../app/src/main/java")
@@ -49,10 +57,15 @@ class UsbWriteSafetyAuditTest {
                             hits += "${file.path}:${index + 1}: $token"
                         }
                     }
+                    forbiddenPaths.forEach { token ->
+                        if (line.contains(token)) {
+                            hits += "${file.path}:${index + 1}: $token"
+                        }
+                    }
                 }
             }
 
-        assertTrue("USB write APIs found:\n${hits.joinToString("\n")}", hits.isEmpty())
+        assertTrue("Forbidden USB write/SAF/hardcoded paths:\n${hits.joinToString("\n")}", hits.isEmpty())
 
         val manifestCandidates = listOf(
             File("src/main/AndroidManifest.xml"),
@@ -66,6 +79,14 @@ class UsbWriteSafetyAuditTest {
         assertTrue(
             "WRITE_EXTERNAL_STORAGE must not be requested",
             !Regex("""<uses-permission[^>]*WRITE_EXTERNAL_STORAGE""").containsMatchIn(manifest)
+        )
+        assertTrue(
+            "FOREGROUND_SERVICE must not be requested in Phase 1",
+            !Regex("""<uses-permission[^>]*FOREGROUND_SERVICE""").containsMatchIn(manifest)
+        )
+        assertTrue(
+            "SAF tree picker must not be declared",
+            !manifest.contains("OPEN_DOCUMENT_TREE")
         )
     }
 }

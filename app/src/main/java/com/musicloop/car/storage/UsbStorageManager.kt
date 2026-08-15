@@ -9,117 +9,147 @@ import android.os.storage.StorageVolume
 import java.io.File
 
 /**
- * Discovers mounted removable USB volumes without hard-coded mount names.
- * Read-only: never creates files, directories, or USB metadata.
+ * Enumerates every StorageVolume the system reports. Read-only.
+ *
+ * Does not hard-code USB1/USB2. Does not use SAF / DocumentsUI.
+ * Media recursion runs only on removable volumes whose state is mounted.
  */
-class UsbStorageManager(context: Context) {
-
+class UsbStorageManager(
+    context: Context,
+    private val scanner: RecursiveMediaScanner = RecursiveMediaScanner()
+) {
     private val appContext = context.applicationContext
 
-    fun discoverMountedVolumes(): List<UsbVolume> {
-        return try {
-            val fromManager = discoverFromStorageManager()
-            if (fromManager.isNotEmpty()) {
-                fromManager
-            } else {
-                discoverFromFilesystem()
-            }
-        } catch (_: Exception) {
-            try {
-                discoverFromFilesystem()
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-    }
-
-    fun volumeContaining(absolutePath: String, volumes: List<UsbVolume> = discoverMountedVolumes()): UsbVolume? {
-        return volumes
-            .filter { MusicFolderPaths.isSameOrChildPath(absolutePath, it.absolutePath) }
-            .maxByOrNull { it.absolutePath.length }
-    }
-
-    fun listSubdirectories(directory: File): List<File> {
-        return try {
-            if (!directory.isDirectory) {
-                emptyList()
-            } else {
-                directory.listFiles()
-                    ?.filter { file ->
-                        try {
-                            file.isDirectory
-                        } catch (_: Exception) {
-                            false
-                        }
-                    }
-                    ?.sortedBy { it.name.lowercase() }
-                    ?: emptyList()
-            }
+    fun inspectAllVolumes(): List<VolumeReport> {
+        val storageManager = appContext.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
+            ?: return emptyList()
+        val volumes = try {
+            storageManager.storageVolumes
         } catch (_: Exception) {
             emptyList()
         }
+        return volumes.mapIndexed { index, volume -> inspectVolume(index + 1, volume) }
     }
 
-    fun isReadableDirectory(path: String): Boolean {
-        return try {
-            val file = File(path)
-            file.isDirectory && file.canRead()
+    private fun inspectVolume(index: Int, volume: StorageVolume): VolumeReport {
+        val description = try {
+            volume.getDescription(appContext)?.takeIf { it.isNotBlank() } ?: "N/A"
+        } catch (_: Exception) {
+            "N/A"
+        }
+        val state = try {
+            volume.state ?: "unknown"
+        } catch (_: Exception) {
+            "unknown"
+        }
+        val removable = try {
+            volume.isRemovable
         } catch (_: Exception) {
             false
         }
-    }
-
-    private fun discoverFromStorageManager(): List<UsbVolume> {
-        val storageManager = appContext.getSystemService(Context.STORAGE_SERVICE) as? StorageManager
-            ?: return emptyList()
-        val primaryPath = primaryStoragePath()
-        return storageManager.storageVolumes.mapNotNull { volume ->
-            volumeToUsb(volume, primaryPath)
-        }.distinctBy { MusicFolderPaths.normalizeAbsolute(it.absolutePath).lowercase() }
-    }
-
-    private fun volumeToUsb(volume: StorageVolume, primaryPath: String?): UsbVolume? {
-        return try {
-            if (volume.isPrimary) {
-                return null
-            }
-            val state = volume.state ?: return null
-            if (state != Environment.MEDIA_MOUNTED && state != Environment.MEDIA_MOUNTED_READ_ONLY) {
-                return null
-            }
-            val path = volumePath(volume) ?: return null
-            val file = File(path)
-            if (!file.isDirectory) {
-                return null
-            }
-            val canonical = canonicalOrAbsolute(file)
-            if (isEmulatedOrPrimary(canonical, primaryPath)) {
-                return null
-            }
-            UsbVolume(
-                uuid = volume.uuid,
-                label = volume.getDescription(appContext),
-                absolutePath = canonical,
-                state = state,
-                isRemovable = volume.isRemovable
-            )
+        val primary = try {
+            volume.isPrimary
+        } catch (_: Exception) {
+            false
+        }
+        val uuid = try {
+            volume.uuid?.takeIf { it.isNotBlank() }
         } catch (_: Exception) {
             null
         }
+        val rootPath = resolveRootPath(volume)
+        val root = rootPath?.let { File(it) }
+        val exists = flag { root?.exists() == true }
+        val isDirectory = flag { root?.isDirectory == true }
+        val canRead = flag { root?.canRead() == true }
+        val listed = try {
+            root?.listFiles()
+        } catch (_: Exception) {
+            null
+        }
+        val listFilesNonNull = listed != null
+        val totalSpace = try {
+            root?.totalSpace ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+        val freeSpace = try {
+            root?.freeSpace ?: 0L
+        } catch (_: Exception) {
+            0L
+        }
+
+        val forbiddenRoot = ScanPolicy.isForbiddenScanRoot(rootPath.orEmpty())
+        val shouldScan = removable && isMounted(state) && root != null && listFilesNonNull && !forbiddenRoot
+        val media = if (shouldScan && root != null) {
+            try {
+                scanner.scan(root)
+            } catch (_: Exception) {
+                MediaScanResult(scanned = false, skipReason = "scan error")
+            }
+        } else {
+            val reason = when {
+                !removable -> "not removable"
+                !isMounted(state) -> "not mounted"
+                root == null -> "root unresolved"
+                forbiddenRoot -> "internal/forbidden"
+                else -> "directory not listable"
+            }
+            MediaScanResult(scanned = false, skipReason = reason)
+        }
+
+        val checks = VerificationChecks.evaluate(
+            volumePresent = true,
+            rootPath = rootPath,
+            exists = exists,
+            isDirectory = isDirectory,
+            canRead = canRead,
+            listFilesNonNull = listFilesNonNull,
+            mediaFilesReadable = media.mediaFilesReadable
+        )
+        return VolumeReport(
+            index = index,
+            description = description,
+            state = state,
+            removableCandidate = removable,
+            isPrimary = primary,
+            uuid = uuid,
+            rootPath = rootPath,
+            exists = exists,
+            canRead = canRead,
+            isDirectory = isDirectory,
+            listFilesNonNull = listFilesNonNull,
+            totalSpaceBytes = totalSpace,
+            freeSpaceBytes = freeSpace,
+            checks = checks,
+            media = media
+        )
     }
 
+    private fun isMounted(state: String): Boolean {
+        return state == Environment.MEDIA_MOUNTED ||
+            state == Environment.MEDIA_MOUNTED_READ_ONLY
+    }
+
+    /**
+     * API 29 CARFU-safe root resolution: directory (API 30+), then getPath(), then mPath.
+     * Never invents USB1/USB2 paths.
+     */
     @SuppressLint("PrivateApi")
-    private fun volumePath(volume: StorageVolume): String? {
+    fun resolveRootPath(volume: StorageVolume): String? {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             try {
-                volume.directory?.absolutePath?.let { return it }
+                volume.directory?.absolutePath?.takeIf { it.isNotBlank() }?.let { return it }
             } catch (_: Exception) {
-                // Fall through to hidden API / filesystem inspection.
+                // Fall through to hidden API used on Android 10.
             }
         }
         try {
             val method = StorageVolume::class.java.getMethod("getPath")
-            (method.invoke(volume) as? String)?.let { return it }
+            val path = method.invoke(volume) as? String
+            if (!path.isNullOrBlank()) {
+                return path
+            }
         } catch (_: Exception) {
             // Continue.
         }
@@ -128,7 +158,7 @@ class UsbStorageManager(context: Context) {
             field.isAccessible = true
             when (val value = field.get(volume)) {
                 is File -> value.absolutePath
-                is String -> value
+                is String -> value.takeIf { it.isNotBlank() }
                 else -> null
             }
         } catch (_: Exception) {
@@ -136,75 +166,11 @@ class UsbStorageManager(context: Context) {
         }
     }
 
-    private fun discoverFromFilesystem(): List<UsbVolume> {
-        val primaryPath = primaryStoragePath()
-        val roots = listOf("/storage", "/mnt/media_rw", "/mnt/usb")
-        val found = mutableListOf<UsbVolume>()
-        for (rootPath in roots) {
-            val root = File(rootPath)
-            val children = try {
-                root.listFiles() ?: continue
-            } catch (_: Exception) {
-                continue
-            }
-            for (child in children) {
-                try {
-                    if (!child.isDirectory) continue
-                    val name = child.name
-                    if (name in SKIP_DIR_NAMES) continue
-                    val canonical = canonicalOrAbsolute(child)
-                    if (isEmulatedOrPrimary(canonical, primaryPath)) continue
-                    if (!child.canRead()) continue
-                    found += UsbVolume(
-                        uuid = MusicFolderPaths.volumeIdentityFromPath(canonical),
-                        label = name,
-                        absolutePath = canonical,
-                        state = Environment.MEDIA_MOUNTED,
-                        isRemovable = true
-                    )
-                } catch (_: Exception) {
-                    // Skip unreadable entries; never crash on a bad USB FS.
-                }
-            }
-        }
-        return found.distinctBy { MusicFolderPaths.normalizeAbsolute(it.absolutePath).lowercase() }
-    }
-
-    private fun primaryStoragePath(): String? {
+    private fun flag(block: () -> Boolean): Boolean {
         return try {
-            Environment.getExternalStorageDirectory()?.let { canonicalOrAbsolute(it) }
+            block()
         } catch (_: Exception) {
-            null
+            false
         }
-    }
-
-    private fun isEmulatedOrPrimary(path: String, primaryPath: String?): Boolean {
-        val normalized = MusicFolderPaths.normalizeAbsolute(path).lowercase()
-        if (normalized.contains("/emulated/")) {
-            return true
-        }
-        if (primaryPath != null && MusicFolderPaths.isSamePath(path, primaryPath)) {
-            return true
-        }
-        return normalized.endsWith("/sdcard") || normalized.endsWith("/sdcard0")
-    }
-
-    private fun canonicalOrAbsolute(file: File): String {
-        return try {
-            MusicFolderPaths.normalizeAbsolute(file.canonicalPath)
-        } catch (_: Exception) {
-            MusicFolderPaths.normalizeAbsolute(file.absolutePath)
-        }
-    }
-
-    companion object {
-        private val SKIP_DIR_NAMES = setOf(
-            ".",
-            "..",
-            "emulated",
-            "self",
-            "enc_emulated",
-            "sdcard0"
-        )
     }
 }
