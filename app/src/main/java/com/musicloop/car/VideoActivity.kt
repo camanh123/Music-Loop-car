@@ -377,7 +377,7 @@ class VideoActivity : AppCompatActivity() {
     }
 
     companion object {
-        private const val SEEK_MAX = 1000L
+        private const val SEEK_MAX = 1000
         private const val SEEK_STEP_MS = 10_000L
         private const val HIDE_DELAY_MS = 4_000L
         private const val EXTRA_ID = "id"

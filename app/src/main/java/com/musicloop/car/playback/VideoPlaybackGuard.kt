@@ -10,4 +10,8 @@ object VideoPlaybackGuard {
         }
         return state.errorMessage == "USB disconnected" || state.errorMessage == "USB offline"
     }
+
+    fun shouldExitForUsbLoss(requestedRelativePath: String?, state: PlaybackUiState): Boolean {
+        return isUsbLossForCurrentVideo(requestedRelativePath, state)
+    }
 }

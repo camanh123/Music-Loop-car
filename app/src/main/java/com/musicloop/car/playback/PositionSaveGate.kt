@@ -7,7 +7,7 @@ class PositionSaveGate(
     private val minIntervalMs: Long = DEFAULT_INTERVAL_MS,
     private val minDeltaMs: Long = DEFAULT_DELTA_MS
 ) {
-    private var lastSavedAtMs: Long = 0L
+    private var lastSavedAtMs: Long = -1L
     private var lastSavedPositionMs: Long = -1L
 
     fun shouldSave(nowMs: Long, positionMs: Long, force: Boolean): Boolean {
@@ -15,7 +15,7 @@ class PositionSaveGate(
             remember(nowMs, positionMs)
             return true
         }
-        val intervalOk = lastSavedAtMs == 0L || nowMs - lastSavedAtMs >= minIntervalMs
+        val intervalOk = lastSavedAtMs < 0L || nowMs - lastSavedAtMs >= minIntervalMs
         val deltaOk = lastSavedPositionMs < 0L ||
             kotlin.math.abs(positionMs - lastSavedPositionMs) >= minDeltaMs
         if (intervalOk && deltaOk) {
