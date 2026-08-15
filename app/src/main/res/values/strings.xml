@@ -2,7 +2,17 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2B.1 — cached USB restore, Media3 playback, car UI. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2B.2 — USB recovery, StorageManager polling, cached restore. USB stays read-only.</string>
+    <string name="reload_usb">↻ TẢI LẠI USB</string>
+    <string name="scan_short">SCAN</string>
+    <string name="usb_online">USB: ONLINE</string>
+    <string name="usb_ready">USB: READY</string>
+    <string name="usb_scanning">USB: SCANNING</string>
+    <string name="usb_offline">USB: OFFLINE</string>
+    <string name="usb_not_detected">USB: NOT DETECTED BY ANDROID</string>
+    <string name="usb_error">USB: ERROR</string>
+    <string name="usb_not_detected_user">USB chưa được Android nhận diện.\nHãy kiểm tra/cắm lại USB hoặc thử cổng USB khác.</string>
+    <string name="usb_not_detected_os">CARFU/Android hiện chưa nhận USB.\nMusicLoop không thể mount USB ở cấp ứng dụng.</string>
     <string name="report_placeholder">Nhấn SCAN để cập nhật thư viện. Chạm audio để phát, chạm video để mở PlayerView.\n\nUSB chỉ được đọc. Không ghi, không SAF, không background service.</string>
     <string name="play">PLAY</string>
     <string name="pause">PAUSE</string>
@@ -16,12 +26,9 @@
     <string name="playback_error">Playback error: %1$s</string>
     <string name="scan_usb_capability">QUÉT KHẢ NĂNG ĐỌC USB</string>
     <string name="scan_rescan">SCAN / RESCAN</string>
-    <string name="scan_short">SCAN</string>
     <string name="capability_short">USB INFO</string>
     <string name="scan_running">Đang quét StorageVolume (chỉ đọc)…</string>
     <string name="permission_required">Cần quyền đọc bộ nhớ để kiểm tra USB.</string>
-    <string name="usb_online">USB: ONLINE</string>
-    <string name="usb_offline">USB: OFFLINE</string>
     <string name="volume_label">Volume: %1$s</string>
     <string name="volume_unknown">—</string>
     <string name="volume_unknown_label">Volume: —</string>

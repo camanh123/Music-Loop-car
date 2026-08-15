@@ -149,7 +149,7 @@ class UsbLifecycleControllerTest {
             assertEquals(1, controller.lastRestoreReport?.cachedItems)
             assertTrue(controller.uiState.value.media.any { it.fileName == "song.mp3" })
             assertTrue(
-                controller.uiState.value.statusMessage.startsWith("Đang cập nhật thư viện")
+                controller.uiState.value.statusMessage.startsWith("USB đã kết nối")
             )
             assertTrue((controller.lastRestoreReport?.libraryVisibleMs ?: -1L) >= 0L)
             assertEquals(null, controller.lastRestoreReport?.scanCompletedMs)
