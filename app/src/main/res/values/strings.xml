@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2B.2 — USB recovery, StorageManager polling, cached restore. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2B.3 — USB hot-plug cleanup. StorageManager remains source of truth. USB stays read-only.</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
     <string name="scan_short">SCAN</string>
     <string name="usb_online">USB: ONLINE</string>

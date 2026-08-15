@@ -93,6 +93,20 @@ class PlaybackCoordinatorTest {
         assertFalse(engine.playing)
         assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
         assertEquals("USB disconnected", coordinator.state.value.errorMessage)
+        assertEquals(null, engine.preparedPath)
+    }
+
+    @Test
+    fun abandonUsbPlaybackStopsAndClearsPreparedPath() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        assertEquals("/mnt/media_rw/AAAA-AAAA/song.mp3", engine.preparedPath)
+        coordinator.abandonUsbPlayback("BROADCAST_EJECT")
+        assertTrue(engine.stopped)
+        assertFalse(engine.playing)
+        assertEquals(null, engine.preparedPath)
+        assertEquals("USB disconnected", coordinator.state.value.errorMessage)
     }
 
     @Test
