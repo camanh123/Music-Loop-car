@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -31,10 +32,35 @@ class Media3PlayerManager(
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext).build()
 
+    @Volatile
+    private var lastPreparedPath: String? = null
+
+    @Volatile
+    private var lastMime: String? = null
+
+    @Volatile
+    private var lastUri: Uri? = null
+
     private val engine = object : PlaybackEngine {
         override fun prepareAndPlay(absolutePath: String) {
-            val uri = Uri.fromFile(File(absolutePath))
-            player.setMediaItem(MediaItem.fromUri(uri))
+            val file = File(absolutePath)
+            val mime = PlaybackMime.fromFileName(file.name)
+            val uri = Uri.fromFile(file)
+            lastPreparedPath = absolutePath
+            lastMime = mime
+            lastUri = uri
+            if (PlaybackMime.isVideoFileName(file.name)) {
+                logVideoPlayback(absolutePath, mime, uri, playerError = "")
+            }
+            val mediaItem = MediaItem.Builder()
+                .setUri(uri)
+                .apply {
+                    if (mime != null) {
+                        setMimeType(mime)
+                    }
+                }
+                .build()
+            player.setMediaItem(mediaItem)
             player.prepare()
             player.playWhenReady = true
             player.play()
@@ -102,6 +128,16 @@ class Media3PlayerManager(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val path = lastPreparedPath.orEmpty()
+                val mime = lastMime
+                val uri = lastUri ?: Uri.EMPTY
+                val formatted = PlaybackErrorClassifier.format(
+                    errorCodeName = error.errorCodeName,
+                    message = error.message,
+                    causeName = error.cause?.javaClass?.name,
+                    causeMessage = error.cause?.message
+                )
+                logVideoPlayback(path, mime, uri, playerError = formatted)
                 val message = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
                 coordinator.onEngineError(message)
             }
@@ -110,6 +146,7 @@ class Media3PlayerManager(
     }
 
     fun playItem(row: MediaListRow) {
+        coordinator.markStarting(row.toPlayable())
         scope.launch {
             val queue = try {
                 withContext(Dispatchers.IO) {
@@ -144,8 +181,27 @@ class Media3PlayerManager(
         coordinator.release()
     }
 
+    private fun logVideoPlayback(path: String, mime: String?, uri: Uri, playerError: String) {
+        val file = File(path)
+        val exists = try {
+            file.exists()
+        } catch (_: Exception) {
+            false
+        }
+        val canRead = try {
+            file.canRead()
+        } catch (_: Exception) {
+            false
+        }
+        Log.i(
+            VIDEO_LOG_TAG,
+            "path=$path exists=$exists canRead=$canRead mimeType=${mime ?: "-"} uri=$uri playerError=${playerError.ifBlank { "-" }}"
+        )
+    }
+
     companion object {
         private const val POSITION_POLL_MS = 400L
+        private const val VIDEO_LOG_TAG = "VIDEO_PLAYBACK"
     }
 }
 

@@ -105,6 +105,21 @@ class PlaybackCoordinatorTest {
         assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
     }
 
+    @Test
+    fun markStartingClearsStaleUsbErrorBeforeResolve() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        coordinator.onOnlineVolumesChanged(emptySet())
+        assertEquals("USB disconnected", coordinator.state.value.errorMessage)
+        coordinator.markStarting(track("clip.mp4", mediaType = "VIDEO"))
+        assertEquals(null, coordinator.state.value.errorMessage)
+        assertEquals("clip.mp4", coordinator.state.value.current?.relativePath)
+        assertEquals(PlayerMode.VIDEO, coordinator.state.value.mode)
+        assertEquals(PlayStatus.BUFFERING, coordinator.state.value.status)
+        assertFalse(VideoPlaybackGuard.shouldExitForUsbLoss("clip.mp4", coordinator.state.value))
+    }
+
     private fun coordinator(
         engine: FakePlaybackEngine,
         onlineRoot: String = "/mnt/media_rw/AAAA-AAAA",

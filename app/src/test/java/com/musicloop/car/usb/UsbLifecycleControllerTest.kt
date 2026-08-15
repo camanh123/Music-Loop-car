@@ -11,6 +11,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -96,6 +97,66 @@ class UsbLifecycleControllerTest {
             val names = repo.mediaForVolume("ABCD-EF01").map { it.fileName }.toSet()
             assertTrue(names.contains("song.mp3"))
             assertTrue(names.contains("extra.mp4"))
+            assertTrue(controller.uiState.value.usbOnline)
+            val restore = controller.lastRestoreReport
+            assertEquals("ABCD-EF01", restore?.volumeId)
+            assertEquals(1, restore?.cachedItems)
+            assertTrue((restore?.libraryVisibleMs ?: -1L) >= 0L)
+            assertTrue((restore?.scanCompletedMs ?: -1L) >= 0L)
+        } finally {
+            scope.cancel()
+            firstRoot.deleteRecursively()
+            secondRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun remountPublishesCachedLibraryBeforeScanCompletes() = runTest {
+        val firstRoot = createTempDirectory("life-cache-first").toFile()
+        val secondRoot = createTempDirectory("life-cache-second").toFile()
+        val scanDispatcher = StandardTestDispatcher(testScheduler)
+        val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher(testScheduler))
+        var elapsed = 1_000L
+        try {
+            firstRoot.resolve("song.mp3").writeText("ok")
+            secondRoot.resolve("song.mp3").writeText("ok")
+            secondRoot.resolve("extra.mp4").writeText("vid")
+            val repo = InMemoryLibraryRepository()
+            val snapshots = mutableListOf(usbSnapshot(firstRoot.absolutePath, uuid = "ABCD-EF01"))
+            val scanner = LibraryMediaScanner(
+                repository = repo,
+                metadataReader = FakeMetadataReader(),
+                ioDispatcher = scanDispatcher
+            )
+            val controller = UsbLifecycleController(
+                snapshotVolumes = { snapshots.toList() },
+                scanner = scanner,
+                repository = repo,
+                scope = scope,
+                now = { 2_000L },
+                elapsedNow = {
+                    elapsed += 5L
+                    elapsed
+                }
+            )
+            controller.start()
+            advanceUntilIdle()
+            snapshots.clear()
+            controller.onBroadcast(Intent.ACTION_MEDIA_UNMOUNTED)
+            advanceUntilIdle()
+            snapshots += usbSnapshot(secondRoot.absolutePath, uuid = "ABCD-EF01")
+            controller.onBroadcast(Intent.ACTION_MEDIA_MOUNTED)
+            assertEquals(1, controller.lastRestoreReport?.cachedItems)
+            assertTrue(controller.uiState.value.media.any { it.fileName == "song.mp3" })
+            assertTrue(
+                controller.uiState.value.statusMessage.startsWith("Đang cập nhật thư viện")
+            )
+            assertTrue((controller.lastRestoreReport?.libraryVisibleMs ?: -1L) >= 0L)
+            assertEquals(null, controller.lastRestoreReport?.scanCompletedMs)
+            advanceUntilIdle()
+            val names = repo.mediaForVolume("ABCD-EF01").map { it.fileName }.toSet()
+            assertEquals(setOf("song.mp3", "extra.mp4"), names)
+            assertTrue((controller.lastRestoreReport?.scanCompletedMs ?: -1L) >= 0L)
             assertTrue(controller.uiState.value.usbOnline)
         } finally {
             scope.cancel()

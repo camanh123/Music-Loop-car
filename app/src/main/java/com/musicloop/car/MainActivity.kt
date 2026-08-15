@@ -2,6 +2,7 @@ package com.musicloop.car
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -9,14 +10,18 @@ import android.os.Looper
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.BaseAdapter
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.musicloop.car.databinding.ActivityMainBinding
 import com.musicloop.car.databinding.ItemMediaBinding
 import com.musicloop.car.library.LibraryUiState
@@ -32,7 +37,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2B library / scanner UI plus local Media3 playback.
+ * Phase 2B.1 car library UI: MUSIC/VIDEO tabs, large rows, Media3 playback.
  * Audio plays in-place. Video opens PlayerView. USB stays read-only.
  */
 class MainActivity : AppCompatActivity() {
@@ -40,7 +45,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val mediaAdapter = MediaListAdapter()
+    private val mediaAdapter = MediaListAdapter { row ->
+        if (row.mediaType == "VIDEO") {
+            startActivity(VideoActivity.intent(this, row))
+        } else {
+            musicLoopApp().playerManager.playItem(row)
+        }
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -49,26 +60,23 @@ class MainActivity : AppCompatActivity() {
             pendingAfterPermission()
         } else {
             Toast.makeText(this, R.string.permission_required, Toast.LENGTH_LONG).show()
-            binding.reportText.setText(R.string.permission_required)
         }
     }
 
     private var pendingAction: (() -> Unit)? = null
     private var userSeeking = false
+    private var libraryTab = LibraryTab.MUSIC
+    private var allMedia: List<MediaListRow> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        binding.mediaList.layoutManager = LinearLayoutManager(this)
+        binding.mediaList.setHasFixedSize(true)
         binding.mediaList.adapter = mediaAdapter
-        binding.mediaList.setOnItemClickListener { _, _, position, _ ->
-            val row = mediaAdapter.getItem(position)
-            if (row.mediaType == "VIDEO") {
-                startActivity(VideoActivity.intent(this, row))
-            } else {
-                musicLoopApp().playerManager.playItem(row)
-            }
-        }
+        binding.tabMusic.setOnClickListener { selectTab(LibraryTab.MUSIC) }
+        binding.tabVideo.setOnClickListener { selectTab(LibraryTab.VIDEO) }
         binding.buttonCapability.setOnClickListener {
             withReadPermission { runCapabilityScan() }
         }
@@ -90,6 +98,7 @@ class MainActivity : AppCompatActivity() {
                 musicLoopApp().playerManager.seekTo(position)
             }
         })
+        selectTab(LibraryTab.MUSIC)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 musicLoopApp().lifecycleController.uiState.collect { state ->
@@ -132,7 +141,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun runCapabilityScan() {
         binding.buttonCapability.isEnabled = false
-        binding.reportText.setText(R.string.scan_running)
         ioExecutor.execute {
             val report = try {
                 val volumes = UsbStorageManager(applicationContext).inspectAllVolumes()
@@ -141,10 +149,37 @@ class MainActivity : AppCompatActivity() {
                 "USB capability scan failed: ${error.javaClass.simpleName}: ${error.message ?: "-"}"
             }
             mainHandler.post {
-                binding.reportText.text = report
                 binding.buttonCapability.isEnabled = true
+                showCapabilityReport(report)
             }
         }
+    }
+
+    private fun showCapabilityReport(report: String) {
+        val scroll = ScrollView(this)
+        val text = TextView(this).apply {
+            this.text = report
+            textSize = 14f
+            typeface = Typeface.MONOSPACE
+            setTextIsSelectable(true)
+            setPadding(40, 24, 40, 24)
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+        }
+        scroll.addView(text)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.scan_usb_capability)
+            .setView(scroll)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun selectTab(tab: LibraryTab) {
+        libraryTab = tab
+        val selected = ContextCompat.getDrawable(this, R.drawable.bg_tab_selected)
+        val idle = ContextCompat.getDrawable(this, R.drawable.bg_button)
+        binding.tabMusic.background = if (tab == LibraryTab.MUSIC) selected else idle
+        binding.tabVideo.background = if (tab == LibraryTab.VIDEO) selected else idle
+        showFiltered()
     }
 
     private fun renderLibrary(state: LibraryUiState) {
@@ -157,43 +192,38 @@ class MainActivity : AppCompatActivity() {
                 if (state.usbOnline) R.color.status_online else R.color.status_offline
             )
         )
-        binding.volumeDescription.text = getString(
-            R.string.volume_label,
-            state.volumeDescription.ifBlank { getString(R.string.volume_unknown) }
-        )
-        binding.scanStatus.text = statusLabel(state)
-        binding.scanProgress.max = 100
-        binding.scanProgress.progress = state.progress.percent
-        binding.progressLabel.text = if (state.scanState == ScanUiState.SCANNING) {
-            if (state.progress.total > 0) {
-                getString(R.string.scan_progress_count, state.progress.scanned, state.progress.total)
-            } else {
-                getString(R.string.scan_progress_unknown)
-            }
-        } else {
-            getString(R.string.scan_progress_percent, state.progress.percent)
-        }
-        binding.countsText.text = getString(
-            R.string.library_counts,
-            state.audioCount,
-            state.videoCount,
-            state.totalCount
-        )
         val scanning = state.scanState == ScanUiState.SCANNING ||
             state.scanState == ScanUiState.DETECTING_USB
+        binding.scanProgress.visibility = if (scanning) View.VISIBLE else View.GONE
+        binding.scanProgress.max = 100
+        binding.scanProgress.progress = state.progress.percent
+        binding.scanStatus.text = getString(
+            R.string.library_status_line,
+            statusLabel(state),
+            state.audioCount,
+            state.videoCount
+        )
         binding.buttonScanLibrary.isEnabled = !scanning
-        mediaAdapter.submit(state.media)
+        allMedia = state.media
+        showFiltered()
+    }
+
+    private fun showFiltered() {
+        val filtered = allMedia.filter { row ->
+            if (libraryTab == LibraryTab.MUSIC) row.mediaType == "AUDIO" else row.mediaType == "VIDEO"
+        }
+        mediaAdapter.submit(filtered)
+        binding.emptyHint.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
+        binding.emptyHint.setText(
+            if (libraryTab == LibraryTab.MUSIC) R.string.empty_music else R.string.empty_video
+        )
     }
 
     private fun renderPlayback(state: PlaybackUiState) {
         binding.nowPlayingTitle.text = state.current?.displayTitle ?: getString(R.string.player_idle)
         binding.nowPlayingArtist.text = state.current?.displayArtist.orEmpty()
-        binding.nowPlayingPosition.text = String.format(
-            java.util.Locale.US,
-            "%s / %s",
-            formatClock(state.positionMs),
-            formatClock(state.durationMs)
-        )
+        binding.positionText.text = formatClock(state.positionMs)
+        binding.durationText.text = formatClock(state.durationMs)
         binding.buttonPlayPause.text = if (state.status == PlayStatus.PLAYING) {
             getString(R.string.pause)
         } else {
@@ -210,7 +240,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun formatClock(ms: Long): String {
         val total = (ms / 1000L).coerceAtLeast(0L)
-        return String.format(java.util.Locale.US, "%d:%02d", total / 60L, total % 60L)
+        return String.format(Locale.US, "%d:%02d", total / 60L, total % 60L)
     }
 
     private fun statusLabel(state: LibraryUiState): String {
@@ -240,68 +270,60 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private class MediaListAdapter : BaseAdapter() {
+    private enum class LibraryTab { MUSIC, VIDEO }
+
+    private class MediaListAdapter(
+        private val onClick: (MediaListRow) -> Unit
+    ) : RecyclerView.Adapter<MediaListAdapter.Holder>() {
         private var rows: List<MediaListRow> = emptyList()
 
         fun submit(items: List<MediaListRow>) {
+            if (items == rows) {
+                return
+            }
             rows = items
             notifyDataSetChanged()
         }
 
-        override fun getCount(): Int = rows.size
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+            val binding = ItemMediaBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+            return Holder(binding, onClick)
+        }
 
-        override fun getItem(position: Int): MediaListRow = rows[position]
+        override fun onBindViewHolder(holder: Holder, position: Int) {
+            holder.bind(rows[position])
+        }
+
+        override fun getItemCount(): Int = rows.size
 
         override fun getItemId(position: Int): Long = rows[position].id
 
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-            val inflater = LayoutInflater.from(parent.context)
-            val itemBinding = if (convertView != null) {
-                ItemMediaBinding.bind(convertView)
-            } else {
-                ItemMediaBinding.inflate(inflater, parent, false)
+        class Holder(
+            private val binding: ItemMediaBinding,
+            private val onClick: (MediaListRow) -> Unit
+        ) : RecyclerView.ViewHolder(binding.root) {
+            fun bind(row: MediaListRow) {
+                val isVideo = row.mediaType == "VIDEO"
+                binding.typeGlyph.text = if (isVideo) {
+                    binding.root.context.getString(R.string.video_glyph)
+                } else {
+                    binding.root.context.getString(R.string.music_glyph)
+                }
+                binding.titleText.text = row.title?.takeIf { it.isNotBlank() } ?: row.fileName
+                binding.subtitleText.text = subtitle(row)
+                binding.root.setOnClickListener { onClick(row) }
             }
-            val row = rows[position]
-            itemBinding.fileName.text = row.fileName
-            itemBinding.metaLine.text = formatMeta(row)
-            return itemBinding.root
-        }
 
-        private fun formatMeta(row: MediaListRow): String {
-            val type = row.mediaType
-            val size = formatSize(row.sizeBytes)
-            val duration = row.durationMs?.let { formatDuration(it) } ?: "--:--"
-            val title = row.title?.takeIf { it.isNotBlank() }
-            val artist = row.artist?.takeIf { it.isNotBlank() }
-            val tag = when {
-                title != null && artist != null -> "$artist — $title"
-                title != null -> title
-                artist != null -> artist
-                else -> ""
+            private fun subtitle(row: MediaListRow): String {
+                val artist = row.artist?.takeIf { it.isNotBlank() }
+                val album = row.album?.takeIf { it.isNotBlank() }
+                return when {
+                    artist != null && album != null -> "$artist / $album"
+                    artist != null -> artist
+                    album != null -> album
+                    else -> row.fileName
+                }
             }
-            return if (tag.isBlank()) {
-                "$type  $size  $duration"
-            } else {
-                "$type  $size  $duration  $tag"
-            }
-        }
-
-        private fun formatSize(bytes: Long): String {
-            if (bytes < 1024) {
-                return "$bytes B"
-            }
-            val kb = bytes / 1024.0
-            if (kb < 1024) {
-                return String.format(Locale.US, "%.1f KB", kb)
-            }
-            return String.format(Locale.US, "%.1f MB", kb / 1024.0)
-        }
-
-        private fun formatDuration(durationMs: Long): String {
-            val totalSeconds = (durationMs / 1000L).coerceAtLeast(0L)
-            val minutes = totalSeconds / 60L
-            val seconds = totalSeconds % 60L
-            return String.format(Locale.US, "%d:%02d", minutes, seconds)
         }
     }
 }
