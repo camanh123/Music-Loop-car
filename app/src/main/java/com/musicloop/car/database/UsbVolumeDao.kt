@@ -13,14 +13,14 @@ interface UsbVolumeDao {
     fun observeAll(): Flow<List<UsbVolumeEntity>>
 
     @Query("SELECT * FROM usb_volumes ORDER BY lastSeenAt DESC")
-    suspend fun getAll(): List<UsbVolumeEntity>
+    fun getAll(): List<UsbVolumeEntity>
 
     @Query("SELECT * FROM usb_volumes WHERE volumeId = :volumeId LIMIT 1")
-    suspend fun getByVolumeId(volumeId: String): UsbVolumeEntity?
+    fun getByVolumeId(volumeId: String): UsbVolumeEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: UsbVolumeEntity): Long
+    fun insert(entity: UsbVolumeEntity): Long
 
     @Update
-    suspend fun update(entity: UsbVolumeEntity)
+    fun update(entity: UsbVolumeEntity)
 }

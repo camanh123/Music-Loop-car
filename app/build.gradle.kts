@@ -52,6 +52,10 @@ android {
         disable += "ExpiredTargetSdkVersion"
         disable += "GradleDependency"
     }
+
+    kapt {
+        correctErrorTypes = true
+    }
 }
 
 dependencies {

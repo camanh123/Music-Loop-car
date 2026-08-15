@@ -13,22 +13,16 @@ interface MediaItemDao {
     fun observeAll(): Flow<List<MediaItemEntity>>
 
     @Query("SELECT * FROM media_items WHERE volumeId = :volumeId")
-    suspend fun getForVolume(volumeId: String): List<MediaItemEntity>
-
-    @Query("SELECT * FROM media_items")
-    suspend fun getAll(): List<MediaItemEntity>
+    fun getForVolume(volumeId: String): List<MediaItemEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAll(items: List<MediaItemEntity>)
+    fun insertAll(items: List<MediaItemEntity>)
 
     @Update
-    suspend fun updateAll(items: List<MediaItemEntity>)
+    fun updateAll(items: List<MediaItemEntity>)
 
     @Query(
         "UPDATE media_items SET scanStatus = :status, lastScannedAt = :at WHERE id IN (:ids)"
     )
-    suspend fun markStatus(ids: List<Long>, status: String, at: Long)
-
-    @Query("SELECT COUNT(*) FROM media_items WHERE mediaType = :mediaType")
-    suspend fun countByType(mediaType: String): Int
+    fun markStatus(ids: List<Long>, status: String, at: Long)
 }

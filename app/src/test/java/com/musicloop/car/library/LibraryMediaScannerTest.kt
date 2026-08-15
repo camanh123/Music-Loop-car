@@ -167,7 +167,7 @@ class LibraryMediaScannerTest {
         return LibraryMediaScanner(
             repository = repo,
             metadataReader = reader,
-            ioDispatcher = UnconfinedTestDispatcher(testScheduler)
+            ioDispatcher = UnconfinedTestDispatcher()
         )
     }
 

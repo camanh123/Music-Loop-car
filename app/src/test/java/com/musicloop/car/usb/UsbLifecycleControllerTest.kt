@@ -7,7 +7,10 @@ import com.musicloop.car.library.FakeMetadataReader
 import com.musicloop.car.library.LibraryMediaScanner
 import com.musicloop.car.library.ScanUiState
 import com.musicloop.car.storage.VolumeSnapshot
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -23,11 +26,12 @@ class UsbLifecycleControllerTest {
     @Test
     fun mountScansReadableRemovableVolume() = runTest {
         val root = createTempDirectory("life-mount").toFile()
+        val scope = testScope()
         try {
             root.resolve("song.mp3").writeText("ok")
             val repo = InMemoryLibraryRepository()
             val snapshots = mutableListOf(usbSnapshot(root.absolutePath))
-            val controller = controller(repo, snapshots)
+            val controller = controller(repo, snapshots, scope)
             controller.start()
             advanceUntilIdle()
             assertTrue(repo.getVolume("AAAA-AAAA")?.isOnline == true)
@@ -35,6 +39,7 @@ class UsbLifecycleControllerTest {
             assertEquals(ScanUiState.COMPLETED, controller.uiState.value.scanState)
             assertTrue(controller.uiState.value.usbOnline)
         } finally {
+            scope.cancel()
             root.deleteRecursively()
         }
     }
@@ -42,11 +47,12 @@ class UsbLifecycleControllerTest {
     @Test
     fun unmountMarksOfflineAndKeepsLibrary() = runTest {
         val root = createTempDirectory("life-unmount").toFile()
+        val scope = testScope()
         try {
             root.resolve("song.mp3").writeText("ok")
             val repo = InMemoryLibraryRepository()
             val snapshots = mutableListOf(usbSnapshot(root.absolutePath))
-            val controller = controller(repo, snapshots)
+            val controller = controller(repo, snapshots, scope)
             controller.start()
             advanceUntilIdle()
             snapshots.clear()
@@ -59,6 +65,7 @@ class UsbLifecycleControllerTest {
             assertEquals(ScanUiState.USB_OFFLINE, controller.uiState.value.scanState)
             assertFalse(controller.uiState.value.usbOnline)
         } finally {
+            scope.cancel()
             root.deleteRecursively()
         }
     }
@@ -67,13 +74,14 @@ class UsbLifecycleControllerTest {
     fun remountWithNewRootRestoresOnlineAndRescans() = runTest {
         val firstRoot = createTempDirectory("life-first").toFile()
         val secondRoot = createTempDirectory("life-second").toFile()
+        val scope = testScope()
         try {
             firstRoot.resolve("song.mp3").writeText("ok")
             secondRoot.resolve("song.mp3").writeText("ok")
             secondRoot.resolve("extra.mp4").writeText("vid")
             val repo = InMemoryLibraryRepository()
             val snapshots = mutableListOf(usbSnapshot(firstRoot.absolutePath, uuid = "ABCD-EF01"))
-            val controller = controller(repo, snapshots)
+            val controller = controller(repo, snapshots, scope)
             controller.start()
             advanceUntilIdle()
             snapshots.clear()
@@ -90,6 +98,7 @@ class UsbLifecycleControllerTest {
             assertTrue(names.contains("extra.mp4"))
             assertTrue(controller.uiState.value.usbOnline)
         } finally {
+            scope.cancel()
             firstRoot.deleteRecursively()
             secondRoot.deleteRecursively()
         }
@@ -97,42 +106,52 @@ class UsbLifecycleControllerTest {
 
     @Test
     fun internalVolumeIsNotScanned() = runTest {
-        val repo = InMemoryLibraryRepository()
-        val snapshots = mutableListOf(
-            VolumeSnapshot(
-                description = "Internal shared storage",
-                state = "mounted",
-                removable = false,
-                isPrimary = true,
-                uuid = null,
-                rootPath = "/storage/emulated/0",
-                exists = true,
-                isDirectory = true,
-                canRead = true,
-                listFilesNonNull = true
+        val scope = testScope()
+        try {
+            val repo = InMemoryLibraryRepository()
+            val snapshots = mutableListOf(
+                VolumeSnapshot(
+                    description = "Internal shared storage",
+                    state = "mounted",
+                    removable = false,
+                    isPrimary = true,
+                    uuid = null,
+                    rootPath = "/storage/emulated/0",
+                    exists = true,
+                    isDirectory = true,
+                    canRead = true,
+                    listFilesNonNull = true
+                )
             )
-        )
-        val controller = controller(repo, snapshots)
-        controller.start()
-        advanceUntilIdle()
-        assertTrue(repo.getAllVolumes().isEmpty())
-        assertEquals(ScanUiState.USB_OFFLINE, controller.uiState.value.scanState)
+            val controller = controller(repo, snapshots, scope)
+            controller.start()
+            advanceUntilIdle()
+            assertTrue(repo.getAllVolumes().isEmpty())
+            assertEquals(ScanUiState.USB_OFFLINE, controller.uiState.value.scanState)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    private fun testScope(): CoroutineScope {
+        return CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
     }
 
     private fun controller(
         repo: InMemoryLibraryRepository,
-        snapshots: MutableList<VolumeSnapshot>
+        snapshots: MutableList<VolumeSnapshot>,
+        scope: CoroutineScope
     ): UsbLifecycleController {
         val scanner = LibraryMediaScanner(
             repository = repo,
             metadataReader = FakeMetadataReader(),
-            ioDispatcher = UnconfinedTestDispatcher(testScheduler)
+            ioDispatcher = UnconfinedTestDispatcher()
         )
         return UsbLifecycleController(
             snapshotVolumes = { snapshots.toList() },
             scanner = scanner,
             repository = repo,
-            scope = backgroundScope,
+            scope = scope,
             now = { 1_000L }
         )
     }
