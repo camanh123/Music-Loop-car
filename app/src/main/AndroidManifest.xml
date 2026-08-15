@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase 2B.2: read-only USB library + Media3 + StorageManager recovery. No write, no service. -->
+    <!-- Phase 2B.3: USB hot-plug resource release. Read-only. No service. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application

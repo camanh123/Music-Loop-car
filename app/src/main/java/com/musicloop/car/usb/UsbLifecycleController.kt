@@ -43,6 +43,7 @@ class UsbLifecycleController(
     private val now: () -> Long = { System.currentTimeMillis() },
     private val elapsedNow: () -> Long = now,
     private val pollIntervalMs: Long = UsbRecoveryPolicy.POLL_INTERVAL_MS,
+    private val onForceReleaseUsbResources: (String) -> Unit = {},
     private val onOnlineVolumesChanged: (Set<String>) -> Unit = {}
 ) {
     private val _uiState = MutableStateFlow(LibraryUiState(statusMessage = "Idle"))
@@ -58,6 +59,9 @@ class UsbLifecycleController(
         private set
 
     var storageSnapshotCount: Int = 0
+        private set
+
+    var usbResourceReleaseCount: Int = 0
         private set
 
     private val mutex = Mutex()
@@ -107,14 +111,38 @@ class UsbLifecycleController(
             Intent.ACTION_MEDIA_MOUNTED,
             Intent.ACTION_MEDIA_CHECKING -> {
                 cancelRequested.set(false)
+                UsbDiagnostics.event("USB_EVENT action=$action scanner=keep player=keep")
                 reconcile(autoScan = true, reason = "BROADCAST_MOUNTED")
             }
+            Intent.ACTION_MEDIA_EJECT -> {
+                dropUsbUseImmediately("BROADCAST_EJECT")
+                reconcile(autoScan = false, reason = "BROADCAST_EJECT")
+            }
             Intent.ACTION_MEDIA_UNMOUNTED,
-            Intent.ACTION_MEDIA_EJECT,
             Intent.ACTION_MEDIA_REMOVED,
             Intent.ACTION_MEDIA_BAD_REMOVAL -> {
+                dropUsbUseImmediately("BROADCAST_UNMOUNTED")
                 reconcile(autoScan = false, reason = "BROADCAST_UNMOUNTED")
             }
+        }
+    }
+
+    /**
+     * Close scanner/player USB use immediately so vold can unmount.
+     * Does not mark ONLINE/OFFLINE — StorageManager still decides that.
+     */
+    private fun dropUsbUseImmediately(reason: String) {
+        cancelRequested.set(true)
+        val scanning = scanJob?.isActive == true
+        scanJob?.cancel()
+        UsbDiagnostics.event(
+            "USB_EVENT action=$reason scanner_cancel=$scanning player_release=requested"
+        )
+        usbResourceReleaseCount += 1
+        try {
+            onForceReleaseUsbResources(reason)
+        } catch (_: Exception) {
+            UsbDiagnostics.event("USB_EVENT action=$reason player_release=failed")
         }
     }
 
@@ -136,6 +164,7 @@ class UsbLifecycleController(
                 val snapshots = snapshotVolumesSafe()
                 val present = snapshots.filter { it.presentMountedRemovable }
                 val scannable = snapshots.filter { it.scannable }
+                UsbDiagnostics.volumes(reason, snapshots)
                 logRecovery(
                     "action=$reason volumes=${snapshots.size} removableMounted=${present.size}"
                 )
@@ -163,6 +192,12 @@ class UsbLifecycleController(
                     if (scanJob?.isActive == true) {
                         cancelRequested.set(true)
                         scanJob?.cancel()
+                        UsbDiagnostics.event("USB_EVENT action=$reason scanner_cancel=true volumeDetected=false")
+                    }
+                    try {
+                        onForceReleaseUsbResources(reason)
+                    } catch (_: Exception) {
+                        // Playback cleanup must not break USB state.
                     }
                     applyVolumeRecords(present)
                     lastSeenVolumeIds = emptySet()
