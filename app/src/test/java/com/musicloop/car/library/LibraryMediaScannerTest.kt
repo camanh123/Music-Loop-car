@@ -55,6 +55,10 @@ class LibraryMediaScannerTest {
             assertTrue(repo.upsertMediaBatchSizes.isEmpty())
             assertEquals("song.mp3", items.single().fileName)
             assertEquals(ScanStatus.COMPLETE, items.single().scanStatus)
+            assertEquals(0, reader.reads.size)
+            assertTrue(repo.upsertMediaBatchSizes.isEmpty())
+            assertEquals(1, scanner.lastIncrementalReport.unchanged)
+            assertEquals(0, scanner.lastIncrementalReport.newItems)
         } finally {
             root.deleteRecursively()
         }
