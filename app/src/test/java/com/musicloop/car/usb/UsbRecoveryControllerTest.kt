@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -140,11 +141,12 @@ class UsbRecoveryControllerTest {
             controller.setForegroundPolling(true)
             snapshots += usbSnapshot(root.absolutePath)
             advanceTimeBy(4_000L)
+            runCurrent()
+            controller.setForegroundPolling(false)
             advanceUntilIdle()
             assertTrue(controller.uiState.value.usbOnline)
             assertTrue(controller.uiState.value.media.any { it.fileName == "song.mp3" })
             assertTrue(controller.scanStartCount > scansBefore)
-            controller.setForegroundPolling(false)
         } finally {
             scope.cancel()
             root.deleteRecursively()
@@ -165,12 +167,13 @@ class UsbRecoveryControllerTest {
             val snapshotsBefore = controller.storageSnapshotCount
             controller.setForegroundPolling(true)
             advanceTimeBy(4_000L)
+            runCurrent()
+            controller.setForegroundPolling(false)
             advanceUntilIdle()
             assertFalse(controller.uiState.value.usbOnline)
             assertEquals(UsbHostState.USB_NOT_DETECTED, controller.uiState.value.usbHostState)
             assertEquals(scans, controller.scanStartCount)
             assertTrue(controller.storageSnapshotCount > snapshotsBefore)
-            controller.setForegroundPolling(false)
         } finally {
             scope.cancel()
         }
@@ -192,11 +195,12 @@ class UsbRecoveryControllerTest {
             val upserts = repo.upsertMediaBatchSizes.toList()
             controller.setForegroundPolling(true)
             advanceTimeBy(12_000L)
+            runCurrent()
+            controller.setForegroundPolling(false)
             advanceUntilIdle()
             assertEquals(scans, controller.scanStartCount)
             assertEquals(upserts, repo.upsertMediaBatchSizes)
             assertTrue(controller.uiState.value.usbOnline)
-            controller.setForegroundPolling(false)
         } finally {
             scope.cancel()
             root.deleteRecursively()

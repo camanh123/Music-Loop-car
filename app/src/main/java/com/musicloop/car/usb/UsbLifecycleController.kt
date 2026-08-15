@@ -457,7 +457,11 @@ class UsbLifecycleController(
             hadKnownVolume = hadKnownVolume
         )
         val current = _uiState.value
-        if (!forceUi && current.usbHostState == host && !current.usbOnline) {
+        if (!forceUi &&
+            current.usbHostState == host &&
+            !current.usbOnline &&
+            current.scanState == ScanUiState.USB_OFFLINE
+        ) {
             return
         }
         val diagnostic = UsbRecoveryPolicy.NOT_DETECTED_USER + "\n" + UsbRecoveryPolicy.NOT_DETECTED_OS
