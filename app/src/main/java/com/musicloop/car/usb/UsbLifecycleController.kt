@@ -207,6 +207,7 @@ class UsbLifecycleController(
                     return@withLock
                 }
                 hadKnownVolume = true
+                cancelRequested.set(false)
                 lastSeenVolumeIds = presentIds
                 applyVolumeRecords(present)
                 val active = scannable.firstOrNull() ?: present.first()
@@ -265,6 +266,7 @@ class UsbLifecycleController(
     private fun startScan() {
         scanJob?.cancel()
         scanStartCount += 1
+        UsbDiagnostics.event("USB_EVENT action=INCREMENTAL_SCAN scanner_state=START count=$scanStartCount")
         scanJob = scope.launch {
             val updating = (lastRestoreReport?.cachedItems ?: 0) > 0
             _uiState.update {
