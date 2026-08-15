@@ -36,8 +36,26 @@ data class MediaListRow(
     val durationMs: Long?,
     val title: String?,
     val artist: String?,
+    val album: String?,
     val scanStatus: String
 )
+
+fun com.musicloop.car.database.MediaItemEntity.toMediaListRow(): MediaListRow {
+    return MediaListRow(
+        id = id,
+        volumeId = volumeId,
+        relativePath = relativePath,
+        fileName = fileName,
+        extension = extension,
+        mediaType = mediaType,
+        sizeBytes = sizeBytes,
+        durationMs = durationMs,
+        title = title,
+        artist = artist,
+        album = album,
+        scanStatus = scanStatus
+    )
+}
 
 data class LibraryUiState(
     val scanState: ScanUiState = ScanUiState.IDLE,

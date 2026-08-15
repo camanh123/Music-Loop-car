@@ -52,6 +52,7 @@ class LibraryMediaScannerTest {
             val items = repo.mediaForVolume("AAAA-AAAA")
             assertEquals(1, items.size)
             assertEquals(0, reader.reads.size)
+            assertTrue(repo.upsertMediaBatchSizes.isEmpty())
             assertEquals("song.mp3", items.single().fileName)
             assertEquals(ScanStatus.COMPLETE, items.single().scanStatus)
         } finally {

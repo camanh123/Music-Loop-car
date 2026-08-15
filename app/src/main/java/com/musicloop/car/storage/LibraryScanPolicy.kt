@@ -8,5 +8,5 @@ object LibraryScanPolicy {
     const val MAX_DEPTH = 12
     const val MAX_FILES = 100_000
     const val BATCH_SIZE = 100
-    const val UI_LIST_LIMIT = 500
+    const val UI_LIST_LIMIT = 8_000
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase 2B: read-only USB library + local Media3 playback. No write, no service. -->
+    <!-- Phase 2B.1: read-only USB library + local Media3 playback. No write, no service. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application

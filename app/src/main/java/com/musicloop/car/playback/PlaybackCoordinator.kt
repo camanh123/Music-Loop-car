@@ -26,6 +26,18 @@ class PlaybackCoordinator(
     private var queue: List<PlayableRef> = emptyList()
     private var index: Int = -1
 
+    fun markStarting(item: PlayableRef) {
+        _state.update {
+            it.copy(
+                current = item,
+                mode = if (item.mediaType == "VIDEO") PlayerMode.VIDEO else PlayerMode.AUDIO,
+                status = PlayStatus.BUFFERING,
+                errorMessage = null,
+                positionMs = 0L
+            )
+        }
+    }
+
     fun playQueue(items: List<PlayableRef>, startIndex: Int) {
         if (items.isEmpty() || startIndex !in items.indices) {
             _state.update {

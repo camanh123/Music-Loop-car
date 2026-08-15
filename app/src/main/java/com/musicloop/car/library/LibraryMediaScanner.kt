@@ -86,7 +86,22 @@ class LibraryMediaScanner(
                     return@withContext ScanOutcome.VOLUME_OFFLINE
                 }
                 seen += file.relativePath
-                pending += resolveItem(volumeId, file, existing[file.relativePath])
+                val previous = existing[file.relativePath]
+                val unchanged = previous != null &&
+                    previous.sizeBytes == file.sizeBytes &&
+                    previous.modifiedTime == file.modifiedTime
+                if (unchanged && previous != null && previous.scanStatus != ScanStatus.STALE) {
+                    processed += 1
+                    onProgress(
+                        ScanProgress(
+                            scanned = processed,
+                            total = total,
+                            currentName = file.fileName
+                        )
+                    )
+                    continue
+                }
+                pending += resolveItem(volumeId, file, previous)
                 processed += 1
                 if (pending.size >= batchSize) {
                     repository.upsertMedia(pending.toList())

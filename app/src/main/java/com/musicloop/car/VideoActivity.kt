@@ -12,6 +12,7 @@ import com.musicloop.car.databinding.ActivityVideoBinding
 import com.musicloop.car.library.MediaListRow
 import com.musicloop.car.playback.PlayStatus
 import com.musicloop.car.playback.PlaybackUiState
+import com.musicloop.car.playback.VideoPlaybackGuard
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -19,6 +20,7 @@ class VideoActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityVideoBinding
     private var userSeeking = false
+    private var requestedRelativePath: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,17 +40,19 @@ class VideoActivity : AppCompatActivity() {
                 musicLoopApp().playerManager.seekTo(position)
             }
         })
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                musicLoopApp().playerManager.state.collect { render(it) }
-            }
-        }
         val row = intent.toMediaRow()
         if (row == null) {
             finish()
             return
         }
+        requestedRelativePath = row.relativePath
+        binding.playerView.player = musicLoopApp().playerManager.player
         musicLoopApp().playerManager.playItem(row)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                musicLoopApp().playerManager.state.collect { render(it) }
+            }
+        }
     }
 
     override fun onStart() {
@@ -58,7 +62,7 @@ class VideoActivity : AppCompatActivity() {
 
     override fun onStop() {
         binding.playerView.player = null
-        if (!isChangingConfigurations) {
+        if (isFinishing) {
             musicLoopApp().playerManager.pause()
         }
         super.onStop()
@@ -76,7 +80,7 @@ class VideoActivity : AppCompatActivity() {
         if (!userSeeking && state.durationMs > 0L) {
             binding.seekBar.progress = ((state.positionMs * SEEK_MAX) / state.durationMs).toInt().coerceIn(0, SEEK_MAX)
         }
-        if (state.errorMessage == "USB disconnected" || state.errorMessage == "USB offline") {
+        if (VideoPlaybackGuard.shouldExitForUsbLoss(requestedRelativePath, state)) {
             finish()
         }
     }
@@ -127,6 +131,7 @@ class VideoActivity : AppCompatActivity() {
                 durationMs = null,
                 title = getStringExtra(EXTRA_TITLE),
                 artist = getStringExtra(EXTRA_ARTIST),
+                album = null,
                 scanStatus = ""
             )
         }

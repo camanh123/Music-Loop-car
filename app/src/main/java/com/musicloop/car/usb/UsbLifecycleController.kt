@@ -1,15 +1,16 @@
 package com.musicloop.car.usb
 
 import android.content.Intent
+import android.util.Log
 import com.musicloop.car.database.LibraryRepository
 import com.musicloop.car.database.LibrarySnapshot
 import com.musicloop.car.database.UsbVolumeEntity
 import com.musicloop.car.library.LibraryMediaScanner
 import com.musicloop.car.library.LibraryUiState
-import com.musicloop.car.library.MediaListRow
 import com.musicloop.car.library.ScanOutcome
 import com.musicloop.car.library.ScanProgress
 import com.musicloop.car.library.ScanUiState
+import com.musicloop.car.library.toMediaListRow
 import com.musicloop.car.storage.LibraryScanPolicy
 import com.musicloop.car.storage.VolumeSnapshot
 import kotlinx.coroutines.CoroutineScope
@@ -29,6 +30,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * BroadcastReceiver events are triggers only. [snapshotVolumes] (StorageManager)
  * is the source of truth for whether a volume is actually mounted and readable.
+ *
+ * On remount, cached Room rows are published immediately, then an incremental
+ * scan runs on the controller scope (Dispatchers.IO in production).
  */
 class UsbLifecycleController(
     private val snapshotVolumes: () -> List<VolumeSnapshot>,
@@ -36,10 +40,14 @@ class UsbLifecycleController(
     private val repository: LibraryRepository,
     private val scope: CoroutineScope,
     private val now: () -> Long = { System.currentTimeMillis() },
+    private val elapsedNow: () -> Long = now,
     private val onOnlineVolumesChanged: (Set<String>) -> Unit = {}
 ) {
     private val _uiState = MutableStateFlow(LibraryUiState(statusMessage = "Idle"))
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
+
+    var lastRestoreReport: UsbRestoreReport? = null
+        private set
 
     private val mutex = Mutex()
     private val cancelRequested = AtomicBoolean(false)
@@ -84,6 +92,7 @@ class UsbLifecycleController(
         scope.launch {
             var shouldScan = false
             mutex.withLock {
+                val restoreStartedAt = elapsedNow()
                 _uiState.update {
                     it.copy(
                         scanState = ScanUiState.DETECTING_USB,
@@ -100,21 +109,41 @@ class UsbLifecycleController(
                     return@withLock
                 }
                 val active = scannable.firstOrNull() ?: present.first()
+                val cached = try {
+                    repository.mediaForVolume(active.volumeId)
+                } catch (_: Exception) {
+                    emptyList()
+                }
+                val rows = cached.take(LibraryScanPolicy.UI_LIST_LIMIT).map { it.toMediaListRow() }
+                val visibleMs = (elapsedNow() - restoreStartedAt).coerceAtLeast(0L)
+                lastRestoreReport = UsbRestoreReport(
+                    volumeId = active.volumeId,
+                    cachedItems = cached.size,
+                    libraryVisibleMs = visibleMs,
+                    scanCompletedMs = null,
+                    restoreStartedAtElapsed = restoreStartedAt,
+                )
+                logRestore("volumeId=${active.volumeId} cachedItems=${cached.size} libraryVisibleMs=$visibleMs scanCompletedMs=-")
                 _uiState.update {
                     it.copy(
                         usbOnline = true,
                         volumeDescription = active.description,
                         volumeId = active.volumeId,
                         lastKnownRootPath = active.rootPath,
+                        media = if (rows.isNotEmpty()) rows else it.media,
+                        audioCount = cached.count { item -> item.mediaType == "AUDIO" },
+                        videoCount = cached.count { item -> item.mediaType == "VIDEO" },
+                        totalCount = cached.size,
                         scanState = if (autoScan && scannable.isNotEmpty()) {
                             ScanUiState.SCANNING
                         } else {
                             ScanUiState.IDLE
                         },
-                        statusMessage = if (autoScan && scannable.isNotEmpty()) {
-                            "Scanning"
-                        } else {
-                            "USB Online"
+                        statusMessage = when {
+                            autoScan && scannable.isNotEmpty() && cached.isNotEmpty() ->
+                                UPDATING_LIBRARY
+                            autoScan && scannable.isNotEmpty() -> "Scanning"
+                            else -> "USB Online"
                         }
                     )
                 }
@@ -129,10 +158,11 @@ class UsbLifecycleController(
     private fun startScan() {
         scanJob?.cancel()
         scanJob = scope.launch {
+            val updating = (lastRestoreReport?.cachedItems ?: 0) > 0
             _uiState.update {
                 it.copy(
                     scanState = ScanUiState.SCANNING,
-                    statusMessage = "Scanning",
+                    statusMessage = if (updating) UPDATING_LIBRARY else "Scanning",
                     progress = ScanProgress(),
                     errorMessage = null
                 )
@@ -191,12 +221,27 @@ class UsbLifecycleController(
             }
             mutex.withLock {
                 when (lastOutcome) {
-                    ScanOutcome.COMPLETED -> _uiState.update {
-                        it.copy(
-                            scanState = ScanUiState.COMPLETED,
-                            usbOnline = true,
-                            statusMessage = "Completed"
+                    ScanOutcome.COMPLETED -> {
+                        val report = lastRestoreReport
+                        val startedAt = report?.restoreStartedAtElapsed ?: elapsedNow()
+                        val completedMs = (elapsedNow() - startedAt).coerceAtLeast(0L)
+                        val visibleMs = report?.libraryVisibleMs ?: 0L
+                        lastRestoreReport = (report ?: UsbRestoreReport(
+                            volumeId = _uiState.value.volumeId,
+                            cachedItems = 0,
+                            libraryVisibleMs = visibleMs,
+                            restoreStartedAtElapsed = startedAt,
+                        )).copy(scanCompletedMs = completedMs)
+                        logRestore(
+                            "volumeId=${_uiState.value.volumeId} cachedItems=${lastRestoreReport?.cachedItems ?: 0} libraryVisibleMs=$visibleMs scanCompletedMs=$completedMs"
                         )
+                        _uiState.update {
+                            it.copy(
+                                scanState = ScanUiState.COMPLETED,
+                                usbOnline = true,
+                                statusMessage = "Completed"
+                            )
+                        }
                     }
                     ScanOutcome.VOLUME_OFFLINE, ScanOutcome.CANCELLED -> {
                         val present = snapshotVolumesSafe().filter { it.presentMountedRemovable }
@@ -299,21 +344,7 @@ class UsbLifecycleController(
 
     private fun applyLibrarySnapshot(snapshot: LibrarySnapshot) {
         val online = snapshot.volumes.firstOrNull { it.isOnline } ?: snapshot.volumes.firstOrNull()
-        val rows = snapshot.media.take(LibraryScanPolicy.UI_LIST_LIMIT).map { item ->
-            MediaListRow(
-                id = item.id,
-                volumeId = item.volumeId,
-                relativePath = item.relativePath,
-                fileName = item.fileName,
-                extension = item.extension,
-                mediaType = item.mediaType,
-                sizeBytes = item.sizeBytes,
-                durationMs = item.durationMs,
-                title = item.title,
-                artist = item.artist,
-                scanStatus = item.scanStatus
-            )
-        }
+        val rows = snapshot.media.take(LibraryScanPolicy.UI_LIST_LIMIT).map { it.toMediaListRow() }
         _uiState.update { current ->
             current.copy(
                 audioCount = snapshot.audioCount,
@@ -332,10 +363,21 @@ class UsbLifecycleController(
     }
 
     private fun progressLabel(progress: ScanProgress): String {
+        val updating = (lastRestoreReport?.cachedItems ?: 0) > 0
+        val prefix = if (updating) UPDATING_LIBRARY else "Scanning..."
         return if (progress.total > 0) {
-            "Scanning... ${progress.scanned} / ${progress.total} files"
+            "$prefix ${progress.scanned} / ${progress.total}"
         } else {
-            "Scanning..."
+            prefix
         }
+    }
+
+    private fun logRestore(message: String) {
+        Log.i(RESTORE_TAG, message)
+    }
+
+    companion object {
+        const val UPDATING_LIBRARY = "Đang cập nhật thư viện..."
+        private const val RESTORE_TAG = "USB_RESTORE"
     }
 }
