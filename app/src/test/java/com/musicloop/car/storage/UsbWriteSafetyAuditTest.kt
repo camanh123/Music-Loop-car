@@ -27,10 +27,10 @@ class UsbWriteSafetyAuditTest {
         "ACTION_OPEN_DOCUMENT_TREE",
         "ACTION_OPEN_DOCUMENT",
         "DocumentsContract",
-        "androidx.media3",
         "com.google.android.exoplayer2",
         "android.media.MediaPlayer",
         "MediaSessionService",
+        "androidx.media3.session",
         "androidx.media.session"
     )
 
@@ -86,7 +86,7 @@ class UsbWriteSafetyAuditTest {
             !Regex("""<uses-permission[^>]*WRITE_EXTERNAL_STORAGE""").containsMatchIn(manifest)
         )
         assertTrue(
-            "FOREGROUND_SERVICE must not be requested in Phase 2A",
+            "FOREGROUND_SERVICE must not be requested in Phase 2B",
             !Regex("""<uses-permission[^>]*FOREGROUND_SERVICE""").containsMatchIn(manifest)
         )
         assertTrue(

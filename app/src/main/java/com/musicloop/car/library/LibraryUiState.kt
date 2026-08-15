@@ -27,7 +27,10 @@ enum class ScanOutcome {
 
 data class MediaListRow(
     val id: Long,
+    val volumeId: String,
+    val relativePath: String,
     val fileName: String,
+    val extension: String,
     val mediaType: String,
     val sizeBytes: Long,
     val durationMs: Long?,

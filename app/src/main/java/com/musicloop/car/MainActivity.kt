@@ -22,6 +22,8 @@ import com.musicloop.car.databinding.ItemMediaBinding
 import com.musicloop.car.library.LibraryUiState
 import com.musicloop.car.library.MediaListRow
 import com.musicloop.car.library.ScanUiState
+import com.musicloop.car.playback.PlayStatus
+import com.musicloop.car.playback.PlaybackUiState
 import com.musicloop.car.storage.CapabilityReportFormatter
 import com.musicloop.car.storage.DeviceInfo
 import com.musicloop.car.storage.UsbStorageManager
@@ -30,8 +32,8 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2A library / scanner UI plus the Phase 1 USB capability report.
- * Item clicks do not start playback.
+ * Phase 2B library / scanner UI plus local Media3 playback.
+ * Audio plays in-place. Video opens PlayerView. USB stays read-only.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -52,14 +54,20 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var pendingAction: (() -> Unit)? = null
+    private var userSeeking = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         binding.mediaList.adapter = mediaAdapter
-        binding.mediaList.setOnItemClickListener { _, _, _, _ ->
-            // Phase 2A: metadata only. Do not play.
+        binding.mediaList.setOnItemClickListener { _, _, position, _ ->
+            val row = mediaAdapter.getItem(position)
+            if (row.mediaType == "VIDEO") {
+                startActivity(VideoActivity.intent(this, row))
+            } else {
+                musicLoopApp().playerManager.playItem(row)
+            }
         }
         binding.buttonCapability.setOnClickListener {
             withReadPermission { runCapabilityScan() }
@@ -67,10 +75,32 @@ class MainActivity : AppCompatActivity() {
         binding.buttonScanLibrary.setOnClickListener {
             withReadPermission { musicLoopApp().lifecycleController.scanOrRescan() }
         }
+        binding.buttonPlayPause.setOnClickListener { musicLoopApp().playerManager.playPause() }
+        binding.buttonPrevious.setOnClickListener { musicLoopApp().playerManager.previous() }
+        binding.buttonNext.setOnClickListener { musicLoopApp().playerManager.next() }
+        binding.audioSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) = Unit
+            override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {
+                userSeeking = true
+            }
+            override fun onStopTrackingTouch(seekBar: android.widget.SeekBar?) {
+                userSeeking = false
+                val duration = musicLoopApp().playerManager.state.value.durationMs
+                val position = if (duration <= 0L) 0L else (duration * (seekBar?.progress ?: 0)) / 1000L
+                musicLoopApp().playerManager.seekTo(position)
+            }
+        })
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 musicLoopApp().lifecycleController.uiState.collect { state ->
                     renderLibrary(state)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                musicLoopApp().playerManager.state.collect { state ->
+                    renderPlayback(state)
                 }
             }
         }
@@ -153,6 +183,34 @@ class MainActivity : AppCompatActivity() {
             state.scanState == ScanUiState.DETECTING_USB
         binding.buttonScanLibrary.isEnabled = !scanning
         mediaAdapter.submit(state.media)
+    }
+
+    private fun renderPlayback(state: PlaybackUiState) {
+        binding.nowPlayingTitle.text = state.current?.displayTitle ?: getString(R.string.player_idle)
+        binding.nowPlayingArtist.text = state.current?.displayArtist.orEmpty()
+        binding.nowPlayingPosition.text = String.format(
+            java.util.Locale.US,
+            "%s / %s",
+            formatClock(state.positionMs),
+            formatClock(state.durationMs)
+        )
+        binding.buttonPlayPause.text = if (state.status == PlayStatus.PLAYING) {
+            getString(R.string.pause)
+        } else {
+            getString(R.string.play)
+        }
+        if (!userSeeking && state.durationMs > 0L) {
+            binding.audioSeekBar.progress =
+                ((state.positionMs * 1000L) / state.durationMs).toInt().coerceIn(0, 1000)
+        }
+        state.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            binding.nowPlayingArtist.text = getString(R.string.playback_error, message)
+        }
+    }
+
+    private fun formatClock(ms: Long): String {
+        val total = (ms / 1000L).coerceAtLeast(0L)
+        return String.format(java.util.Locale.US, "%d:%02d", total / 60L, total % 60L)
     }
 
     private fun statusLabel(state: LibraryUiState): String {
