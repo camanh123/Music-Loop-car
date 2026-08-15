@@ -11,7 +11,7 @@ class PlaybackErrorClassifierTest {
             PlaybackErrorClassifier.isCodecLimitation(
                 errorCodeName = "ERROR_CODE_DECODER_INIT_FAILED",
                 message = "Decoder init failed",
-                causeName = "android.media.MediaCodec$CodecException",
+                causeName = "android.media.MediaCodec.CodecException",
                 causeMessage = "Failed to initialize decoder"
             )
         )
