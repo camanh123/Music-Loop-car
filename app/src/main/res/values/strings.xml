@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2B.3 — USB hot-plug cleanup. StorageManager remains source of truth. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2B.4 — Video fullscreen and restore. StorageManager remains source of truth. USB stays read-only.</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
     <string name="scan_short">SCAN</string>
     <string name="usb_online">USB: ONLINE</string>
@@ -53,4 +53,9 @@
     <string name="music_glyph">🎵</string>
     <string name="video_glyph">🎬</string>
     <string name="library_status_line">%1$s  ·  Audio %2$d  ·  Video %3$d</string>
+    <string name="rewind">-10</string>
+    <string name="forward">+10</string>
+    <string name="fullscreen">FULL</string>
+    <string name="video_usb_waiting">USB disconnected — waiting to restore</string>
+    <string name="video_missing_fallback">Last video unavailable — playing first available video</string>
 </resources>
