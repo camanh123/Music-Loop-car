@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1280" />
+  <title>MusicLoop CARFU — Video UX layout preview</title>
+  <style>
+    :root {
+      --bg: #0B1016;
+      --header: #121A24;
+      --panel: #151E2A;
+      --button: #243044;
+      --button-off: #1A2433;
+      --accent: #E0A100;
+      --text: #F4F7FB;
+      --muted: #A8B3C4;
+      --dim: #6E7A8A;
+      --online: #3DDC84;
+      --offline: #E85D4C;
+      --overlay: rgba(11, 16, 22, 0.60);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #05070a;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    body { padding: 16px 16px 32px; }
+    .note {
+      max-width: 1280px;
+      margin: 0 auto 12px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .note strong { color: var(--accent); }
+    .note a { color: #8ec8ff; }
+    .frame {
+      width: 1280px;
+      height: 720px;
+      margin: 0 auto;
+      background: var(--bg);
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45);
+    }
+    .library, .player {
+      width: 1280px;
+      height: 720px;
+      display: none;
+    }
+    .library.visible, .player.visible { display: flex; }
+    .library { flex-direction: column; padding: 8px 12px; }
+    .row { display: flex; align-items: center; }
+    .btn {
+      background: var(--button);
+      color: var(--text);
+      border: 0;
+      border-radius: 10px;
+      min-height: 56px;
+      padding: 0 16px;
+      font-size: 18px;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .btn:disabled { background: var(--button-off); color: var(--dim); cursor: default; }
+    .btn.selected { outline: 2px solid var(--accent); }
+    .tab { flex: 1; margin-right: 8px; height: 56px; }
+    .status { font-weight: bold; margin: 0 8px; font-size: 18px; }
+    .status.online { color: var(--online); }
+    .status.offline { color: var(--offline); }
+    .scan { color: var(--muted); font-size: 16px; margin: 6px 0 8px; }
+    .list {
+      flex: 1;
+      background: var(--panel);
+      border-radius: 12px;
+      overflow: auto;
+      padding: 4px 0;
+    }
+    .item {
+      height: 72px;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid #2A3648;
+      cursor: pointer;
+    }
+    .item.current { background: #1d2a3c; }
+    .glyph { width: 36px; font-size: 22px; }
+    .title { font-size: 22px; font-weight: bold; }
+    .sub { color: var(--muted); font-size: 16px; }
+    .audio-bar {
+      margin-top: 8px;
+      background: var(--panel);
+      border-radius: 12px;
+      padding: 10px 16px;
+    }
+    .audio-bar .title { font-size: 22px; }
+    .transport { display: flex; gap: 8px; margin-top: 8px; }
+    .transport .btn { flex: 1; height: 56px; }
+    .player { background: #000; position: relative; }
+    .stage {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .fit-video {
+      width: 1280px;
+      height: 720px;
+      background:
+        linear-gradient(180deg, #0a1a2c 0%, #13283f 50%, #0a1a2c 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 28px;
+      letter-spacing: 2px;
+    }
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      pointer-events: none;
+    }
+    .overlay * { pointer-events: auto; }
+    .overlay.hidden { display: none; }
+    .bar {
+      background: var(--overlay);
+      padding: 10px 16px;
+    }
+    .bar.top { display: flex; align-items: center; }
+    .bar.top .name { flex: 1; font-size: 22px; font-weight: bold; }
+    .scrim { flex: 1; }
+    .controls { display: flex; gap: 8px; }
+    .controls .btn { flex: 1; height: 72px; }
+    .controls .btn.play { flex: 1.2; }
+    .seek-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+    input[type=range] { flex: 1; height: 32px; }
+    .clock { width: 64px; font-size: 16px; }
+    .clock.end { text-align: right; }
+    .full-row { display: flex; justify-content: flex-end; margin-top: 4px; }
+    .catcher {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+    .catcher.on { display: block; }
+  </style>
+</head>
+<body>
+  <p class="note">
+    <strong>Static layout preview only.</strong>
+    This is not the Android APK and does not play USB media.
+    Frame size is <strong>1280×720 landscape</strong>, matching the CARFU screen.
+    Use it to inspect library layout, fullscreen video, overlay controls, prev/next, seek, and restore after a fake USB unplug.
+    Real playback: install
+    <a href="https://github.com/camanh123/Music-Loop-car/raw/main/release/MusicLoop-Phase2B4-CARFU.apk">MusicLoop-Phase2B4-CARFU.apk</a>
+  </p>
+  <div class="frame" id="frame">
+    <section class="library visible" id="library">
+      <div class="row">
+        <button class="btn tab" id="tabMusic">MUSIC</button>
+        <button class="btn tab selected" id="tabVideo">VIDEO</button>
+        <div class="status online" id="usbStatus">USB: ONLINE</div>
+        <button class="btn" id="usbToggle" style="margin-right:8px">UNPLUG USB</button>
+        <button class="btn">USB INFO</button>
+      </div>
+      <div class="scan" id="scanStatus">Completed  ·  Audio 12  ·  Video 60</div>
+      <div class="list" id="list"></div>
+      <div class="audio-bar">
+        <div class="title" id="nowPlaying">No track</div>
+        <div class="transport">
+          <button class="btn">PREV</button>
+          <button class="btn">PLAY</button>
+          <button class="btn">NEXT</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="player" id="player">
+      <div class="stage"><div class="fit-video" id="fitVideo">VIDEO  ·  FIT / aspect preserved</div></div>
+      <div class="catcher" id="catcher"></div>
+      <div class="overlay" id="overlay">
+        <div class="bar top">
+          <div class="name" id="videoTitle">Video_01.mp4</div>
+          <button class="btn" id="closeBtn">CLOSE</button>
+        </div>
+        <div class="scrim" id="scrim"></div>
+        <div class="bar">
+          <div class="controls">
+            <button class="btn" id="rew">-10</button>
+            <button class="btn" id="prev">PREV</button>
+            <button class="btn play" id="play">PAUSE</button>
+            <button class="btn" id="next">NEXT</button>
+            <button class="btn" id="fwd">+10</button>
+          </div>
+          <div class="seek-row">
+            <div class="clock" id="pos">0:00</div>
+            <input type="range" id="seek" min="0" max="1000" value="0" />
+            <div class="clock end" id="dur">12:40</div>
+          </div>
+          <div class="full-row">
+            <button class="btn" id="full">FULL</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+<script>
+  const VIDEOS = Array.from({ length: 60 }, (_, i) => {
+    const n = String(i + 1).padStart(2, "0");
+    return { id: i, name: "Video_" + n + ".mp4", duration: 760 };
+  });
+  const KEY = "musicloop_preview_state";
+  const listEl = document.getElementById("list");
+  const overlay = document.getElementById("overlay");
+  const catcher = document.getElementById("catcher");
+  let tab = "video";
+  let usbOnline = true;
+  let current = 54;
+  let position = 207;
+    let playing = true;
+    let hideTimer = null;
+    let ticking = false;
+
+  function load() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+      if (typeof saved.current === "number") current = saved.current;
+      if (typeof saved.position === "number") position = saved.position;
+      if (typeof saved.scroll === "number") listEl.scrollTop = saved.scroll;
+    } catch (_) {}
+  }
+  function save(extra) {
+    localStorage.setItem(KEY, JSON.stringify({
+      current, position, scroll: listEl.scrollTop, ...(extra || {})
+    }));
+  }
+  function clock(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
+  function renderList() {
+    listEl.innerHTML = "";
+    VIDEOS.forEach((v, i) => {
+      const row = document.createElement("div");
+      row.className = "item" + (i === current ? " current" : "");
+      row.innerHTML = '<div class="glyph">🎬</div><div><div class="title">' +
+        v.name + '</div><div class="sub">clips/' + v.name + '</div></div>';
+      row.onclick = () => { current = i; save(); openPlayer(); };
+      listEl.appendChild(row);
+    });
+    const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+    if (typeof saved.scroll === "number") listEl.scrollTop = saved.scroll;
+    else listEl.children[current]?.scrollIntoView({ block: "center" });
+  }
+  function showLibrary() {
+    document.getElementById("library").classList.add("visible");
+    document.getElementById("player").classList.remove("visible");
+    playing = false;
+    renderList();
+  }
+  function openPlayer() {
+    document.getElementById("library").classList.remove("visible");
+    document.getElementById("player").classList.add("visible");
+    document.getElementById("videoTitle").textContent = VIDEOS[current].name;
+    document.getElementById("fitVideo").textContent = VIDEOS[current].name + "  ·  FIT";
+    document.getElementById("dur").textContent = clock(VIDEOS[current].duration);
+    document.getElementById("prev").disabled = current <= 0;
+    document.getElementById("next").disabled = current >= VIDEOS.length - 1;
+    playing = true;
+    document.getElementById("play").textContent = "PAUSE";
+    showOverlay(true);
+    if (!ticking) {
+      ticking = true;
+      tick();
+    }
+  }
+  function showOverlay(autoHide) {
+    overlay.classList.remove("hidden");
+    catcher.classList.remove("on");
+    clearTimeout(hideTimer);
+    if (autoHide && playing && usbOnline) {
+      hideTimer = setTimeout(hideOverlay, 4000);
+    }
+  }
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+    catcher.classList.add("on");
+  }
+  function tick() {
+    document.getElementById("pos").textContent = clock(position);
+    const dur = VIDEOS[current].duration;
+    document.getElementById("seek").value = String(Math.round((position / dur) * 1000));
+    if (playing && usbOnline) {
+      position = Math.min(dur, position + 1);
+      if (position % 5 === 0) save();
+    }
+    requestAnimationFrame(() => setTimeout(tick, 1000));
+  }
+  listEl.addEventListener("scroll", () => save());
+  document.getElementById("closeBtn").onclick = () => { save(); showLibrary(); };
+  document.getElementById("scrim").onclick = hideOverlay;
+  document.getElementById("full").onclick = hideOverlay;
+  catcher.onclick = () => showOverlay(true);
+  document.getElementById("play").onclick = () => {
+    playing = !playing;
+    document.getElementById("play").textContent = playing ? "PAUSE" : "PLAY";
+    showOverlay(playing);
+    save();
+  };
+  document.getElementById("prev").onclick = () => {
+    if (current > 0) { current -= 1; position = 0; save(); openPlayer(); }
+  };
+  document.getElementById("next").onclick = () => {
+    if (current < VIDEOS.length - 1) { current += 1; position = 0; save(); openPlayer(); }
+  };
+  document.getElementById("rew").onclick = () => { position = Math.max(0, position - 10); save(); };
+  document.getElementById("fwd").onclick = () => { position = Math.min(VIDEOS[current].duration, position + 10); save(); };
+  document.getElementById("seek").oninput = (e) => {
+    position = Math.round((Number(e.target.value) / 1000) * VIDEOS[current].duration);
+    save();
+  };
+  document.getElementById("usbToggle").onclick = () => {
+    usbOnline = !usbOnline;
+    const status = document.getElementById("usbStatus");
+    const btn = document.getElementById("usbToggle");
+    if (usbOnline) {
+      status.textContent = "USB: ONLINE";
+      status.className = "status online";
+      btn.textContent = "UNPLUG USB";
+      document.getElementById("scanStatus").textContent = "Completed  ·  Audio 12  ·  Video 60";
+      load();
+      renderList();
+    } else {
+      status.textContent = "USB: OFFLINE";
+      status.className = "status offline";
+      btn.textContent = "PLUG USB";
+      save();
+      playing = false;
+    }
+  };
+  load();
+  renderList();
+  document.getElementById("nowPlaying").textContent = VIDEOS[current].name;
+</script>
+</body>
+</html>
