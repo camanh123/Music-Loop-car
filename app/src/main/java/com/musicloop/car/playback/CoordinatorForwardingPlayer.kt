@@ -8,6 +8,10 @@ import androidx.media3.common.util.UnstableApi
  * Routes MediaSession transport to [PlaybackCoordinator] so notification
  * Previous/Next resolve USB paths instead of walking an ExoPlayer playlist.
  * The wrapped ExoPlayer instance is unchanged for Video PlayerView.
+ *
+ * In-app MP3 next/previous still wrap via [PlaybackCoordinator.next]. Notification
+ * skip stops at the first and last queue items and does not advertise unavailable
+ * commands.
  */
 @UnstableApi
 class CoordinatorForwardingPlayer(
@@ -32,41 +36,47 @@ class CoordinatorForwardingPlayer(
     }
 
     override fun seekToNext() {
-        coordinator.next()
+        coordinator.skipToNext()
     }
 
     override fun seekToPrevious() {
-        coordinator.previous()
+        coordinator.skipToPrevious()
     }
 
     override fun seekToNextMediaItem() {
-        coordinator.next()
+        coordinator.skipToNext()
     }
 
     override fun seekToPreviousMediaItem() {
-        coordinator.previous()
+        coordinator.skipToPrevious()
     }
 
-    override fun hasNextMediaItem(): Boolean = true
+    override fun hasNextMediaItem(): Boolean = coordinator.hasNextItem()
 
-    override fun hasPreviousMediaItem(): Boolean = true
+    override fun hasPreviousMediaItem(): Boolean = coordinator.hasPreviousItem()
 
     override fun isCommandAvailable(command: Int): Boolean {
         return when (command) {
-            COMMAND_SEEK_TO_NEXT,
-            COMMAND_SEEK_TO_PREVIOUS,
-            COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-            COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+            COMMAND_SEEK_TO_NEXT, COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> coordinator.hasNextItem()
+            COMMAND_SEEK_TO_PREVIOUS, COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> coordinator.hasPreviousItem()
             else -> super.isCommandAvailable(command)
         }
     }
 
     override fun getAvailableCommands(): Player.Commands {
-        return super.getAvailableCommands().buildUpon()
-            .add(COMMAND_SEEK_TO_NEXT)
-            .add(COMMAND_SEEK_TO_PREVIOUS)
-            .add(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-            .add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-            .build()
+        val builder = super.getAvailableCommands().buildUpon()
+            .remove(COMMAND_SEEK_TO_NEXT)
+            .remove(COMMAND_SEEK_TO_PREVIOUS)
+            .remove(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+            .remove(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        if (coordinator.hasNextItem()) {
+            builder.add(COMMAND_SEEK_TO_NEXT)
+            builder.add(COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+        }
+        if (coordinator.hasPreviousItem()) {
+            builder.add(COMMAND_SEEK_TO_PREVIOUS)
+            builder.add(COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+        }
+        return builder.build()
     }
 }
