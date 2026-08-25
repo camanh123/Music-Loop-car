@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase 2B.4: Video fullscreen + restore. Read-only. No service. -->
+    <!-- Phase 2C.1: background MP3 via MediaSessionService. USB stays read-only. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".MusicLoopApp"
@@ -48,5 +50,15 @@
                 <data android:scheme="file" />
             </intent-filter>
         </receiver>
+
+        <service
+            android:name=".playback.MusicLoopPlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

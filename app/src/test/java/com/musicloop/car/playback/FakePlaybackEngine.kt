@@ -9,7 +9,7 @@ class FakePlaybackEngine : PlaybackEngine {
     var durationMs = 12_000L
     val seeks = mutableListOf<Long>()
 
-    override fun prepareAndPlay(absolutePath: String) {
+    override fun prepareAndPlay(absolutePath: String, title: String?, artist: String?, mediaId: String?) {
         preparedPath = absolutePath
         playing = true
         stopped = false

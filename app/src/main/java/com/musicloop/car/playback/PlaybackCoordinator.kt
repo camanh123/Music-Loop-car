@@ -97,6 +97,26 @@ class PlaybackCoordinator(
         playCurrent()
     }
 
+    fun hasNextItem(): Boolean = index >= 0 && index < queue.lastIndex
+
+    fun hasPreviousItem(): Boolean = index > 0
+
+    fun skipToNext() {
+        if (!hasNextItem()) {
+            return
+        }
+        index += 1
+        playCurrent()
+    }
+
+    fun skipToPrevious() {
+        if (!hasPreviousItem()) {
+            return
+        }
+        index -= 1
+        playCurrent()
+    }
+
     fun seekTo(positionMs: Long) {
         val duration = _state.value.durationMs
         val clamped = positionMs.coerceAtLeast(0L).let { value ->
@@ -205,7 +225,12 @@ class PlaybackCoordinator(
                 is ResolveResult.Ready -> {
                     try {
                         withContext(mainDispatcher) {
-                            engine.prepareAndPlay(resolved.absolutePath)
+                            engine.prepareAndPlay(
+                                absolutePath = resolved.absolutePath,
+                                title = item.displayTitle,
+                                artist = item.displayArtist,
+                                mediaId = "${item.volumeId}:${item.relativePath}"
+                            )
                         }
                         _state.update { it.copy(status = PlayStatus.PLAYING, errorMessage = null) }
                     } catch (_: Exception) {

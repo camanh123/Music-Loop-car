@@ -120,6 +120,54 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun sessionSkipStopsAtFirstAndLastQueueItems() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        assertFalse(coordinator.hasPreviousItem())
+        assertTrue(coordinator.hasNextItem())
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("c.mp3"))
+        assertFalse(coordinator.hasNextItem())
+        assertTrue(coordinator.hasPreviousItem())
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("c.mp3"))
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
+        assertFalse(coordinator.hasPreviousItem())
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
+    }
+
+    @Test
+    fun sessionSkipDoesNotMoveOnASingleItemQueue() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("only.mp3")), 0)
+        assertFalse(coordinator.hasNextItem())
+        assertFalse(coordinator.hasPreviousItem())
+        coordinator.skipToNext()
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("only.mp3"))
+    }
+
+    @Test
+    fun usbDisconnectStopsServiceHold() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+        coordinator.abandonUsbPlayback("BROADCAST_EJECT")
+        assertFalse(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
     fun markStartingClearsStaleUsbErrorBeforeResolve() = runTest {
         val engine = FakePlaybackEngine()
         val coordinator = coordinator(engine)

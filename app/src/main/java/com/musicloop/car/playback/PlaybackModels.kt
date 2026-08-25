@@ -50,7 +50,7 @@ sealed class ResolveResult {
 }
 
 interface PlaybackEngine {
-    fun prepareAndPlay(absolutePath: String)
+    fun prepareAndPlay(absolutePath: String, title: String? = null, artist: String? = null, mediaId: String? = null)
     fun pause()
     fun play()
     fun stop()

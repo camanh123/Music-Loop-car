@@ -12,8 +12,8 @@ android {
         applicationId = "com.musicloop.car"
         minSdk = 29
         targetSdk = 29
-        versionCode = 7
-        versionName = "0.3.4"
+        versionCode = 8
+        versionName = "0.4.0"
     }
 
     testOptions {
@@ -40,6 +40,7 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf("-opt-in=androidx.media3.common.util.UnstableApi")
     }
 
     buildFeatures {
@@ -51,6 +52,7 @@ android {
         checkReleaseBuilds = false
         disable += "ExpiredTargetSdkVersion"
         disable += "GradleDependency"
+        disable += "UnsafeOptInUsageError"
     }
 
     kapt {
@@ -70,6 +72,7 @@ dependencies {
     implementation("androidx.recyclerview:recyclerview:1.3.2")
     implementation("androidx.media3:media3-exoplayer:1.1.1")
     implementation("androidx.media3:media3-ui:1.1.1")
+    implementation("androidx.media3:media3-session:1.1.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
