@@ -66,10 +66,70 @@ class UsbRecoveryControllerTest {
             advanceUntilIdle()
             assertTrue(controller.uiState.value.usbOnline)
             assertEquals(scans, controller.scanStartCount)
+            assertTrue(controller.usbResourceReleaseCount >= 1)
             assertTrue(
                 controller.uiState.value.usbHostState == UsbHostState.USB_READY ||
                     controller.uiState.value.usbHostState == UsbHostState.USB_ONLINE
             )
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun ejectReleasesUsbResourcesEvenIfStorageManagerStillListsVolume() = runTest {
+        val root = createTempDirectory("rec-eject").toFile()
+        val scope = testScope()
+        try {
+            root.resolve("song.mp3").writeText("ok")
+            val repo = InMemoryLibraryRepository()
+            val snapshots = mutableListOf(usbSnapshot(root.absolutePath))
+            var releases = 0
+            val controller = UsbLifecycleController(
+                snapshotVolumes = { snapshots.toList() },
+                scanner = LibraryMediaScanner(
+                    repository = repo,
+                    metadataReader = FakeMetadataReader(),
+                    ioDispatcher = UnconfinedTestDispatcher()
+                ),
+                repository = repo,
+                scope = scope,
+                now = { 1_000L },
+                onForceReleaseUsbResources = { releases += 1 }
+            )
+            controller.start()
+            advanceUntilIdle()
+            assertTrue(controller.uiState.value.usbOnline)
+            controller.onBroadcast(Intent.ACTION_MEDIA_EJECT)
+            advanceUntilIdle()
+            assertTrue(releases >= 1)
+            assertTrue(controller.usbResourceReleaseCount >= 1)
+            assertTrue(controller.uiState.value.usbOnline)
+            assertEquals(1, repo.mediaForVolume("AAAA-AAAA").size)
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun unmountWithEmptyStorageManagerGoesOfflineAndKeepsCache() = runTest {
+        val root = createTempDirectory("rec-gone").toFile()
+        val scope = testScope()
+        try {
+            root.resolve("song.mp3").writeText("ok")
+            val repo = InMemoryLibraryRepository()
+            val snapshots = mutableListOf(usbSnapshot(root.absolutePath))
+            val controller = controller(repo, snapshots, scope)
+            controller.start()
+            advanceUntilIdle()
+            snapshots.clear()
+            controller.onBroadcast(Intent.ACTION_MEDIA_UNMOUNTED)
+            advanceUntilIdle()
+            assertFalse(controller.uiState.value.usbOnline)
+            assertEquals(1, repo.mediaForVolume("AAAA-AAAA").size)
+            assertTrue(controller.usbResourceReleaseCount >= 1)
         } finally {
             scope.cancel()
             root.deleteRecursively()

@@ -50,6 +50,11 @@ class MusicLoopApp : Application() {
             scanner = scanner,
             repository = repository,
             scope = applicationScope,
+            onForceReleaseUsbResources = { reason ->
+                if (this::playerManager.isInitialized) {
+                    playerManager.releaseUsbMedia(reason)
+                }
+            },
             onOnlineVolumesChanged = { ids ->
                 if (this::playerManager.isInitialized) {
                     playerManager.onOnlineVolumesChanged(ids)

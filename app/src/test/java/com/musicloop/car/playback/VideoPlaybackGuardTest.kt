@@ -19,11 +19,11 @@ class VideoPlaybackGuardTest {
             ),
             errorMessage = "USB disconnected"
         )
-        assertFalse(VideoPlaybackGuard.shouldExitForUsbLoss("clip.mp4", state))
+        assertFalse(VideoPlaybackGuard.isUsbLossForCurrentVideo("clip.mp4", state))
     }
 
     @Test
-    fun exitsOnlyWhenRequestedVideoMatchesUsbLoss() {
+    fun detectsUsbLossOnlyWhenRequestedVideoMatches() {
         val state = PlaybackUiState(
             current = PlayableRef(
                 id = 2L,
@@ -36,8 +36,8 @@ class VideoPlaybackGuardTest {
             ),
             errorMessage = "USB offline"
         )
-        assertTrue(VideoPlaybackGuard.shouldExitForUsbLoss("clip.mp4", state))
-        assertFalse(VideoPlaybackGuard.shouldExitForUsbLoss(null, state))
-        assertFalse(VideoPlaybackGuard.shouldExitForUsbLoss("", state.copy(errorMessage = null)))
+        assertTrue(VideoPlaybackGuard.isUsbLossForCurrentVideo("clip.mp4", state))
+        assertFalse(VideoPlaybackGuard.isUsbLossForCurrentVideo(null, state))
+        assertFalse(VideoPlaybackGuard.isUsbLossForCurrentVideo("", state.copy(errorMessage = null)))
     }
 }
