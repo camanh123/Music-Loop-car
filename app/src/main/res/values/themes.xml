@@ -11,6 +11,13 @@
         <item name="android:colorBackground">@color/bg_app</item>
     </style>
 
+    <style name="Theme.MusicLoopCar.Video" parent="Theme.MusicLoopCar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+    </style>
+
     <style name="Widget.MusicLoopCar.TransportButton" parent="Widget.AppCompat.Button">
         <item name="android:minHeight">@dimen/button_min_size</item>
         <item name="android:minWidth">@dimen/button_min_size</item>

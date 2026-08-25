@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Phase 2B.3: USB hot-plug resource release. Read-only. No service. -->
+    <!-- Phase 2B.4: Video fullscreen + restore. Read-only. No service. -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
 
     <application
@@ -32,6 +32,7 @@
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
             android:exported="false"
             android:screenOrientation="landscape"
+            android:theme="@style/Theme.MusicLoopCar.Video"
             android:windowSoftInputMode="adjustPan" />
 
         <receiver
