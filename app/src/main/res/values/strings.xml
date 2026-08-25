@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2C.1 — Background MP3 via MediaSession. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2C — Background MP3, audio focus, media buttons. USB stays read-only.</string>
     <string name="playback_notification_channel">MusicLoop playback</string>
     <string name="playback_notification_placeholder">Playing USB audio</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>

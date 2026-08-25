@@ -26,6 +26,7 @@ class PlaybackCoordinator(
 
     private var queue: List<PlayableRef> = emptyList()
     private var index: Int = -1
+    private var needsPrepare: Boolean = false
 
     fun markStarting(item: PlayableRef) {
         _state.update {
@@ -34,9 +35,11 @@ class PlaybackCoordinator(
                 mode = if (item.mediaType == "VIDEO") PlayerMode.VIDEO else PlayerMode.AUDIO,
                 status = PlayStatus.BUFFERING,
                 errorMessage = null,
-                positionMs = 0L
+                positionMs = 0L,
+                needsPrepare = false
             )
         }
+        needsPrepare = false
     }
 
     fun playQueue(items: List<PlayableRef>, startIndex: Int) {
@@ -144,6 +147,34 @@ class PlaybackCoordinator(
         _state.update { it.copy(status = PlayStatus.ENDED) }
     }
 
+    /**
+     * ExoPlayer paused itself (audio focus loss, becoming noisy, media pause).
+     * Does not override USB disconnect / error.
+     */
+    fun onEnginePausedBySystem() {
+        val status = _state.value.status
+        if (status == PlayStatus.STOPPED || status == PlayStatus.ERROR || status == PlayStatus.IDLE) {
+            return
+        }
+        _state.update { it.copy(status = PlayStatus.PAUSED) }
+    }
+
+    /**
+     * ExoPlayer resumed itself (audio focus gain). Does not start a new item.
+     */
+    fun onEngineResumedBySystem() {
+        val status = _state.value.status
+        if (status == PlayStatus.STOPPED || status == PlayStatus.ERROR ||
+            status == PlayStatus.IDLE || status == PlayStatus.ENDED
+        ) {
+            return
+        }
+        if (needsPrepare) {
+            return
+        }
+        _state.update { it.copy(status = PlayStatus.PLAYING, errorMessage = null) }
+    }
+
     fun onEngineError(message: String) {
         try {
             engine.stop()
@@ -166,6 +197,18 @@ class PlaybackCoordinator(
             scope.launch(mainDispatcher) {
                 abandonUsbPlayback("volume_offline volumeId=${current.volumeId}")
             }
+            return
+        }
+        val state = _state.value
+        if (state.status == PlayStatus.STOPPED && state.errorMessage == "USB disconnected") {
+            // USB is back. Keep identity, do not auto-play.
+            _state.update {
+                it.copy(
+                    status = PlayStatus.PAUSED,
+                    errorMessage = null,
+                    needsPrepare = true
+                )
+            }
         }
     }
 
@@ -182,6 +225,7 @@ class PlaybackCoordinator(
         }
         queue = emptyList()
         index = -1
+        needsPrepare = false
         _state.value = PlaybackUiState()
     }
 
@@ -190,7 +234,10 @@ class PlaybackCoordinator(
         if (current == null) {
             return
         }
-        if (_state.value.status == PlayStatus.ENDED || _state.value.status == PlayStatus.STOPPED) {
+        if (needsPrepare ||
+            _state.value.status == PlayStatus.ENDED ||
+            _state.value.status == PlayStatus.STOPPED
+        ) {
             playCurrent()
             return
         }
@@ -210,9 +257,11 @@ class PlaybackCoordinator(
                 mode = if (item.mediaType == "VIDEO") PlayerMode.VIDEO else PlayerMode.AUDIO,
                 status = PlayStatus.BUFFERING,
                 errorMessage = null,
-                positionMs = 0L
+                positionMs = 0L,
+                needsPrepare = false
             )
         }
+        needsPrepare = false
         scope.launch {
             val resolved = try {
                 withContext(ioDispatcher) {
@@ -261,11 +310,13 @@ class PlaybackCoordinator(
         } catch (_: Exception) {
             // Ignore engine failures while stopping.
         }
+        needsPrepare = true
         _state.update {
             it.copy(
                 status = status,
                 positionMs = 0L,
-                errorMessage = error
+                errorMessage = error,
+                needsPrepare = true
             )
         }
     }

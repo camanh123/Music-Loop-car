@@ -38,14 +38,16 @@ class Media3PlayerManager(
     private val mainHandler = Handler(Looper.getMainLooper())
 
     val player: ExoPlayer = ExoPlayer.Builder(appContext).build().also { exo ->
+        // Media3 standard noisy-audio handling (wired/BT disconnect). No custom receiver.
         exo.setHandleAudioBecomingNoisy(true)
         exo.setWakeMode(C.WAKE_MODE_LOCAL)
+        // Media3 standard audio focus. handleAudioFocus=true — no custom focus listener.
         exo.setAudioAttributes(
             AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build(),
-            true
+            /* handleAudioFocus= */ true
         )
     }
 
@@ -167,6 +169,22 @@ class Media3PlayerManager(
             syncSessionService()
         }
 
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            // Audio focus loss/gain and becoming-noisy pause/resume happen on the
+            // ExoPlayer instance, not through CoordinatorForwardingPlayer.
+            when (player.playbackState) {
+                Player.STATE_IDLE, Player.STATE_ENDED -> Unit
+                else -> {
+                    if (playWhenReady) {
+                        coordinator.onEngineResumedBySystem()
+                    } else {
+                        coordinator.onEnginePausedBySystem()
+                    }
+                }
+            }
+            syncSessionService()
+        }
+
         override fun onPlayerError(error: PlaybackException) {
             val path = lastPreparedPath.orEmpty()
             val mime = lastMime
@@ -242,6 +260,27 @@ class Media3PlayerManager(
 
     fun onOnlineVolumesChanged(onlineVolumeIds: Set<String>) {
         coordinator.onOnlineVolumesChanged(onlineVolumeIds)
+        syncSessionService()
+    }
+
+    /**
+     * Push ExoPlayer play/pause into coordinator UI after returning to MainActivity.
+     * Does not start a new item or create another player.
+     */
+    fun reconcileUiFromPlayer() {
+        runOnMain {
+            when (player.playbackState) {
+                Player.STATE_IDLE, Player.STATE_ENDED -> Unit
+                else -> {
+                    if (player.playWhenReady && player.isPlaying) {
+                        coordinator.onEngineResumedBySystem()
+                    } else if (!player.playWhenReady) {
+                        coordinator.onEnginePausedBySystem()
+                    }
+                }
+            }
+            syncSessionService()
+        }
     }
 
     /**

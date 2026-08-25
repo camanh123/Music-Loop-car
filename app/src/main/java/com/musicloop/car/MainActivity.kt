@@ -138,6 +138,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        musicLoopApp().playerManager.reconcileUiFromPlayer()
         if (libraryTab == LibraryTab.VIDEO) {
             pendingVideoScrollRestore = true
             restoreVideoScrollIfNeeded()

@@ -12,8 +12,8 @@ android {
         applicationId = "com.musicloop.car"
         minSdk = 29
         targetSdk = 29
-        versionCode = 8
-        versionName = "0.4.0"
+        versionCode = 9
+        versionName = "0.4.1"
     }
 
     testOptions {
