@@ -29,6 +29,7 @@ class FakePlaybackEngine : PlaybackEngine {
         playing = false
         stopped = true
         positionMs = 0L
+        preparedPath = null
     }
 
     override fun seekTo(positionMs: Long) {

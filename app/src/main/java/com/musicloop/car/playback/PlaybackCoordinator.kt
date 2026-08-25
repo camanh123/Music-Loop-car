@@ -1,5 +1,6 @@
 package com.musicloop.car.playback
 
+import android.util.Log
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -134,10 +135,17 @@ class PlaybackCoordinator(
         }
     }
 
+    fun abandonUsbPlayback(reason: String) {
+        stopInternal(status = PlayStatus.STOPPED, error = "USB disconnected")
+        Log.i(USB_LOG, "player_abandon reason=$reason status=STOPPED")
+    }
+
     fun onOnlineVolumesChanged(onlineVolumeIds: Set<String>) {
         val current = queue.getOrNull(index) ?: return
         if (current.volumeId !in onlineVolumeIds) {
-            stopInternal(status = PlayStatus.STOPPED, error = "USB disconnected")
+            scope.launch(mainDispatcher) {
+                abandonUsbPlayback("volume_offline volumeId=${current.volumeId}")
+            }
         }
     }
 
@@ -235,5 +243,9 @@ class PlaybackCoordinator(
                 errorMessage = error
             )
         }
+    }
+
+    companion object {
+        private const val USB_LOG = "MusicLoopUSB"
     }
 }

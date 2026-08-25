@@ -29,15 +29,18 @@ import com.musicloop.car.library.MediaListRow
 import com.musicloop.car.library.ScanUiState
 import com.musicloop.car.playback.PlayStatus
 import com.musicloop.car.playback.PlaybackUiState
+import com.musicloop.car.playback.VideoPlaybackStore
+import com.musicloop.car.playback.VideoRestore
 import com.musicloop.car.storage.CapabilityReportFormatter
 import com.musicloop.car.storage.DeviceInfo
 import com.musicloop.car.storage.UsbStorageManager
+import com.musicloop.car.usb.UsbHostState
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2B.1 car library UI: MUSIC/VIDEO tabs, large rows, Media3 playback.
+ * Phase 2B.2 car library UI: MUSIC/VIDEO tabs, USB recovery, Media3 playback.
  * Audio plays in-place. Video opens PlayerView. USB stays read-only.
  */
 class MainActivity : AppCompatActivity() {
@@ -45,8 +48,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val ioExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val videoStore by lazy { VideoPlaybackStore(applicationContext) }
     private val mediaAdapter = MediaListAdapter { row ->
         if (row.mediaType == "VIDEO") {
+            persistVideoScroll()
             startActivity(VideoActivity.intent(this, row))
         } else {
             musicLoopApp().playerManager.playItem(row)
@@ -67,6 +72,16 @@ class MainActivity : AppCompatActivity() {
     private var userSeeking = false
     private var libraryTab = LibraryTab.MUSIC
     private var allMedia: List<MediaListRow> = emptyList()
+    private var pendingVideoScrollRestore = true
+    private var usbWasOffline = true
+
+    private val videoScrollListener = object : RecyclerView.OnScrollListener() {
+        override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+            if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                persistVideoScroll()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -75,13 +90,14 @@ class MainActivity : AppCompatActivity() {
         binding.mediaList.layoutManager = LinearLayoutManager(this)
         binding.mediaList.setHasFixedSize(true)
         binding.mediaList.adapter = mediaAdapter
+        binding.mediaList.addOnScrollListener(videoScrollListener)
         binding.tabMusic.setOnClickListener { selectTab(LibraryTab.MUSIC) }
         binding.tabVideo.setOnClickListener { selectTab(LibraryTab.VIDEO) }
         binding.buttonCapability.setOnClickListener {
             withReadPermission { runCapabilityScan() }
         }
         binding.buttonScanLibrary.setOnClickListener {
-            withReadPermission { musicLoopApp().lifecycleController.scanOrRescan() }
+            withReadPermission { musicLoopApp().lifecycleController.manualRescan() }
         }
         binding.buttonPlayPause.setOnClickListener { musicLoopApp().playerManager.playPause() }
         binding.buttonPrevious.setOnClickListener { musicLoopApp().playerManager.previous() }
@@ -101,8 +117,13 @@ class MainActivity : AppCompatActivity() {
         selectTab(LibraryTab.MUSIC)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                musicLoopApp().lifecycleController.uiState.collect { state ->
-                    renderLibrary(state)
+                musicLoopApp().lifecycleController.setForegroundPolling(true)
+                try {
+                    musicLoopApp().lifecycleController.uiState.collect { state ->
+                        renderLibrary(state)
+                    }
+                } finally {
+                    musicLoopApp().lifecycleController.setForegroundPolling(false)
                 }
             }
         }
@@ -113,6 +134,19 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (libraryTab == LibraryTab.VIDEO) {
+            pendingVideoScrollRestore = true
+            restoreVideoScrollIfNeeded()
+        }
+    }
+
+    override fun onPause() {
+        persistVideoScroll()
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -179,13 +213,15 @@ class MainActivity : AppCompatActivity() {
         val idle = ContextCompat.getDrawable(this, R.drawable.bg_button)
         binding.tabMusic.background = if (tab == LibraryTab.MUSIC) selected else idle
         binding.tabVideo.background = if (tab == LibraryTab.VIDEO) selected else idle
+        if (tab == LibraryTab.VIDEO) {
+            pendingVideoScrollRestore = true
+        }
         showFiltered()
     }
 
     private fun renderLibrary(state: LibraryUiState) {
-        binding.usbStatus.text = getString(
-            if (state.usbOnline) R.string.usb_online else R.string.usb_offline
-        )
+        val hostLabel = hostLabel(state.usbHostState)
+        binding.usbStatus.text = hostLabel
         binding.usbStatus.setTextColor(
             ContextCompat.getColor(
                 this,
@@ -203,9 +239,33 @@ class MainActivity : AppCompatActivity() {
             state.audioCount,
             state.videoCount
         )
-        binding.buttonScanLibrary.isEnabled = !scanning
+        val diagnostic = state.diagnosticMessage
+        if (diagnostic.isNullOrBlank()) {
+            binding.diagnosticText.visibility = View.GONE
+            binding.diagnosticText.text = ""
+        } else {
+            binding.diagnosticText.visibility = View.VISIBLE
+            binding.diagnosticText.text = diagnostic
+        }
+        if (!state.usbOnline) {
+            usbWasOffline = true
+        } else if (usbWasOffline) {
+            pendingVideoScrollRestore = true
+            usbWasOffline = false
+        }
         allMedia = state.media
         showFiltered()
+    }
+
+    private fun hostLabel(state: UsbHostState): String {
+        return when (state) {
+            UsbHostState.USB_ONLINE -> getString(R.string.usb_online)
+            UsbHostState.USB_READY -> getString(R.string.usb_ready)
+            UsbHostState.USB_SCANNING -> getString(R.string.usb_scanning)
+            UsbHostState.USB_OFFLINE -> getString(R.string.usb_offline)
+            UsbHostState.USB_NOT_DETECTED -> getString(R.string.usb_not_detected)
+            UsbHostState.USB_ERROR -> getString(R.string.usb_error)
+        }
     }
 
     private fun showFiltered() {
@@ -217,6 +277,41 @@ class MainActivity : AppCompatActivity() {
         binding.emptyHint.setText(
             if (libraryTab == LibraryTab.MUSIC) R.string.empty_music else R.string.empty_video
         )
+        if (libraryTab == LibraryTab.VIDEO) {
+            restoreVideoScrollIfNeeded()
+        }
+    }
+
+    private fun persistVideoScroll() {
+        if (libraryTab != LibraryTab.VIDEO || mediaAdapter.itemCount <= 0) {
+            return
+        }
+        val layoutManager = binding.mediaList.layoutManager as? LinearLayoutManager ?: return
+        val position = layoutManager.findFirstVisibleItemPosition()
+        if (position == RecyclerView.NO_POSITION) {
+            return
+        }
+        val offset = layoutManager.findViewByPosition(position)?.top ?: 0
+        videoStore.saveListScroll(position, offset, System.currentTimeMillis())
+    }
+
+    private fun restoreVideoScrollIfNeeded() {
+        if (libraryTab != LibraryTab.VIDEO || !pendingVideoScrollRestore) {
+            return
+        }
+        if (mediaAdapter.itemCount <= 0) {
+            return
+        }
+        val saved = videoStore.load()
+        val position = VideoRestore.clampScroll(saved.listPosition, mediaAdapter.itemCount)
+        binding.mediaList.post {
+            if (libraryTab != LibraryTab.VIDEO || mediaAdapter.itemCount <= 0) {
+                return@post
+            }
+            val layoutManager = binding.mediaList.layoutManager as? LinearLayoutManager ?: return@post
+            layoutManager.scrollToPositionWithOffset(position, saved.listOffset)
+            pendingVideoScrollRestore = false
+        }
     }
 
     private fun renderPlayback(state: PlaybackUiState) {

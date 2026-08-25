@@ -21,4 +21,5 @@
     <dimen name="media_row_height">72dp</dimen>
     <dimen name="usb_bar_height">88dp</dimen>
     <dimen name="corner_radius">12dp</dimen>
+    <dimen name="video_transport_height">72dp</dimen>
 </resources>

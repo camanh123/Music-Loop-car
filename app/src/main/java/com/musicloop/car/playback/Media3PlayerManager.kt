@@ -20,6 +20,10 @@ import java.io.File
 
 /**
  * Media3 playback facade. Plays directly from a resolved USB path. Never copies files.
+ *
+ * ExoPlayer is process-owned and must be mutated on the main thread. USB disconnect
+ * stops playback and clears the current MediaItem so FileDataSource can drop FDs.
+ * The player instance is not destroyed on unplug (PlayerView may still be attached).
  */
 class Media3PlayerManager(
     context: Context,
@@ -43,45 +47,52 @@ class Media3PlayerManager(
 
     private val engine = object : PlaybackEngine {
         override fun prepareAndPlay(absolutePath: String) {
-            val file = File(absolutePath)
-            val mime = PlaybackMime.fromFileName(file.name)
-            val uri = Uri.fromFile(file)
-            lastPreparedPath = absolutePath
-            lastMime = mime
-            lastUri = uri
-            if (PlaybackMime.isVideoFileName(file.name)) {
-                logVideoPlayback(absolutePath, mime, uri, playerError = "")
-            }
-            val mediaItem = MediaItem.Builder()
-                .setUri(uri)
-                .apply {
-                    if (mime != null) {
-                        setMimeType(mime)
-                    }
+            runOnMainBlocking {
+                val file = File(absolutePath)
+                val mime = PlaybackMime.fromFileName(file.name)
+                val uri = Uri.fromFile(file)
+                lastPreparedPath = absolutePath
+                lastMime = mime
+                lastUri = uri
+                if (PlaybackMime.isVideoFileName(file.name)) {
+                    logVideoPlayback(absolutePath, mime, uri, playerError = "")
                 }
-                .build()
-            player.setMediaItem(mediaItem)
-            player.prepare()
-            player.playWhenReady = true
-            player.play()
+                Log.i(
+                    USB_LOG,
+                    "player_prepare pathSet=${absolutePath.isNotBlank()} mime=${mime ?: "-"}"
+                )
+                val mediaItem = MediaItem.Builder()
+                    .setUri(uri)
+                    .apply {
+                        if (mime != null) {
+                            setMimeType(mime)
+                        }
+                    }
+                    .build()
+                player.setMediaItem(mediaItem)
+                player.prepare()
+                player.playWhenReady = true
+                player.play()
+            }
         }
 
         override fun pause() {
-            player.pause()
+            runOnMainBlocking { player.pause() }
         }
 
         override fun play() {
-            player.playWhenReady = true
-            player.play()
+            runOnMainBlocking {
+                player.playWhenReady = true
+                player.play()
+            }
         }
 
         override fun stop() {
-            player.stop()
-            player.clearMediaItems()
+            runOnMainBlocking { stopAndDropUsbMedia("engine_stop") }
         }
 
         override fun seekTo(positionMs: Long) {
-            player.seekTo(positionMs)
+            runOnMainBlocking { player.seekTo(positionMs) }
         }
 
         override fun position(): Long = player.currentPosition.coerceAtLeast(0L)
@@ -94,7 +105,11 @@ class Media3PlayerManager(
         override fun isPlaying(): Boolean = player.isPlaying
 
         override fun release() {
-            player.release()
+            runOnMainBlocking {
+                stopAndDropUsbMedia("engine_release")
+                player.release()
+                Log.i(USB_LOG, "player_release")
+            }
         }
     }
 
@@ -109,7 +124,9 @@ class Media3PlayerManager(
     private val pollRunnable = object : Runnable {
         override fun run() {
             try {
-                coordinator.publishPosition(engine.position(), engine.duration())
+                if (lastPreparedPath != null || player.isPlaying) {
+                    coordinator.publishPosition(engine.position(), engine.duration())
+                }
             } catch (_: Exception) {
                 // Poll must never crash UI.
             }
@@ -117,31 +134,35 @@ class Media3PlayerManager(
         }
     }
 
-    init {
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                when (playbackState) {
-                    Player.STATE_ENDED -> coordinator.onEngineEnded()
-                    Player.STATE_BUFFERING -> { /* coordinator already set BUFFERING */ }
-                    else -> Unit
-                }
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_ENDED -> coordinator.onEngineEnded()
+                Player.STATE_BUFFERING -> { /* coordinator already set BUFFERING */ }
+                else -> Unit
             }
+        }
 
-            override fun onPlayerError(error: PlaybackException) {
-                val path = lastPreparedPath.orEmpty()
-                val mime = lastMime
-                val uri = lastUri ?: Uri.EMPTY
-                val formatted = PlaybackErrorClassifier.format(
-                    errorCodeName = error.errorCodeName,
-                    message = error.message,
-                    causeName = error.cause?.javaClass?.name,
-                    causeMessage = error.cause?.message
-                )
-                logVideoPlayback(path, mime, uri, playerError = formatted)
-                val message = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
-                coordinator.onEngineError(message)
-            }
-        })
+        override fun onPlayerError(error: PlaybackException) {
+            val path = lastPreparedPath.orEmpty()
+            val mime = lastMime
+            val uri = lastUri ?: Uri.EMPTY
+            val formatted = PlaybackErrorClassifier.format(
+                errorCodeName = error.errorCodeName,
+                message = error.message,
+                causeName = error.cause?.javaClass?.name,
+                causeMessage = error.cause?.message
+            )
+            logVideoPlayback(path, mime, uri, playerError = formatted)
+            Log.i(USB_LOG, "playback_error $formatted")
+            val message = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
+            coordinator.onEngineError(message)
+            runOnMain { stopAndDropUsbMedia("player_error") }
+        }
+    }
+
+    init {
+        player.addListener(playerListener)
         mainHandler.post(pollRunnable)
     }
 
@@ -176,9 +197,61 @@ class Media3PlayerManager(
         coordinator.onOnlineVolumesChanged(onlineVolumeIds)
     }
 
+    /**
+     * Drop USB media resources immediately. Must be safe to call from any thread.
+     * Does not destroy the ExoPlayer instance (VideoActivity may still be attached).
+     */
+    fun releaseUsbMedia(reason: String) {
+        runOnMain {
+            coordinator.abandonUsbPlayback(reason)
+            stopAndDropUsbMedia(reason)
+        }
+    }
+
     fun release() {
         mainHandler.removeCallbacks(pollRunnable)
         coordinator.release()
+    }
+
+    private fun stopAndDropUsbMedia(reason: String) {
+        try {
+            player.stop()
+            player.clearMediaItems()
+        } catch (_: Exception) {
+            // Disconnect cleanup must not crash.
+        }
+        lastPreparedPath = null
+        lastMime = null
+        lastUri = null
+        Log.i(USB_LOG, "player_usb_drop reason=$reason mediaCleared=true")
+    }
+
+    private fun runOnMain(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+        } else {
+            mainHandler.post(block)
+        }
+    }
+
+    private fun runOnMainBlocking(block: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block()
+            return
+        }
+        val latch = java.util.concurrent.CountDownLatch(1)
+        mainHandler.post {
+            try {
+                block()
+            } finally {
+                latch.countDown()
+            }
+        }
+        try {
+            latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+        } catch (_: Exception) {
+            // Playback calls must not hang the USB lifecycle forever.
+        }
     }
 
     private fun logVideoPlayback(path: String, mime: String?, uri: Uri, playerError: String) {
@@ -202,6 +275,7 @@ class Media3PlayerManager(
     companion object {
         private const val POSITION_POLL_MS = 400L
         private const val VIDEO_LOG_TAG = "VIDEO_PLAYBACK"
+        private const val USB_LOG = "MusicLoopUSB"
     }
 }
 

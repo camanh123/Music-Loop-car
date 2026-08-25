@@ -7,6 +7,7 @@ import com.musicloop.car.storage.EnumeratedMediaFile
 import com.musicloop.car.storage.LibraryScanPolicy
 import com.musicloop.car.storage.MediaEnumerator
 import com.musicloop.car.storage.VolumeSnapshot
+import com.musicloop.car.usb.IncrementalScanReport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,8 @@ class LibraryMediaScanner(
     private val maxFiles: Int = LibraryScanPolicy.MAX_FILES,
     private val now: () -> Long = { System.currentTimeMillis() }
 ) {
+    var lastIncrementalReport: IncrementalScanReport = IncrementalScanReport()
+        private set
 
     suspend fun scanVolume(
         snapshot: VolumeSnapshot,
@@ -75,6 +78,9 @@ class LibraryMediaScanner(
         val pending = mutableListOf<MediaItemEntity>()
         val seen = HashSet<String>(total)
         var processed = 0
+        var unchangedCount = 0
+        var newCount = 0
+        var changedCount = 0
 
         try {
             for (file in discovered) {
@@ -91,6 +97,7 @@ class LibraryMediaScanner(
                     previous.sizeBytes == file.sizeBytes &&
                     previous.modifiedTime == file.modifiedTime
                 if (unchanged && previous != null && previous.scanStatus != ScanStatus.STALE) {
+                    unchangedCount += 1
                     processed += 1
                     onProgress(
                         ScanProgress(
@@ -100,6 +107,11 @@ class LibraryMediaScanner(
                         )
                     )
                     continue
+                }
+                if (previous == null) {
+                    newCount += 1
+                } else {
+                    changedCount += 1
                 }
                 pending += resolveItem(volumeId, file, previous)
                 processed += 1
@@ -132,6 +144,13 @@ class LibraryMediaScanner(
                 .filter { it != 0L }
                 .toList()
             repository.markStale(staleIds, now())
+            lastIncrementalReport = IncrementalScanReport(
+                volumeId = volumeId,
+                changed = changedCount,
+                newItems = newCount,
+                stale = staleIds.size,
+                unchanged = unchangedCount
+            )
             onProgress(ScanProgress(scanned = processed, total = total))
             ScanOutcome.COMPLETED
         } catch (cancelled: CancellationException) {

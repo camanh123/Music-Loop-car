@@ -1,5 +1,7 @@
 package com.musicloop.car.library
 
+import com.musicloop.car.usb.UsbHostState
+
 enum class ScanUiState {
     IDLE,
     DETECTING_USB,
@@ -59,6 +61,7 @@ fun com.musicloop.car.database.MediaItemEntity.toMediaListRow(): MediaListRow {
 
 data class LibraryUiState(
     val scanState: ScanUiState = ScanUiState.IDLE,
+    val usbHostState: UsbHostState = UsbHostState.USB_NOT_DETECTED,
     val usbOnline: Boolean = false,
     val volumeDescription: String = "",
     val volumeId: String = "",
@@ -69,5 +72,6 @@ data class LibraryUiState(
     val totalCount: Int = 0,
     val media: List<MediaListRow> = emptyList(),
     val statusMessage: String = "",
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val diagnosticMessage: String? = null
 )
