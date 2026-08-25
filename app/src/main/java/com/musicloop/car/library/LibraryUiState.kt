@@ -39,7 +39,8 @@ data class MediaListRow(
     val title: String?,
     val artist: String?,
     val album: String?,
-    val scanStatus: String
+    val scanStatus: String,
+    val modifiedTime: Long = 0L
 )
 
 fun com.musicloop.car.database.MediaItemEntity.toMediaListRow(): MediaListRow {
@@ -55,7 +56,8 @@ fun com.musicloop.car.database.MediaItemEntity.toMediaListRow(): MediaListRow {
         title = title,
         artist = artist,
         album = album,
-        scanStatus = scanStatus
+        scanStatus = scanStatus,
+        modifiedTime = modifiedTime
     )
 }
 

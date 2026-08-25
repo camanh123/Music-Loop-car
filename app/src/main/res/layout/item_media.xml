@@ -2,7 +2,7 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="@dimen/media_row_height"
-    android:background="?android:attr/selectableItemBackground"
+    android:background="@drawable/bg_media_row"
     android:gravity="center_vertical"
     android:minHeight="@dimen/media_row_height"
     android:orientation="horizontal"
@@ -51,5 +51,6 @@
         android:layout_height="wrap_content"
         android:text="@string/play_glyph"
         android:textColor="@color/accent"
-        android:textSize="22sp" />
+        android:textSize="22sp"
+        android:visibility="gone" />
 </LinearLayout>

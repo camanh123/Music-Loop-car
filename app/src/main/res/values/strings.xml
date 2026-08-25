@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2C — Background MP3, audio focus, media buttons. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2D.1 — Car library UX. USB stays read-only.</string>
     <string name="playback_notification_channel">MusicLoop playback</string>
     <string name="playback_notification_placeholder">Playing USB audio</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
@@ -47,10 +47,21 @@
     <string name="scan_progress_placeholder">0%</string>
     <string name="library_counts">Audio: %1$d    Video: %2$d    Total: %3$d</string>
     <string name="library_counts_placeholder">Audio: 0    Video: 0    Total: 0</string>
-    <string name="tab_music">🎵 MUSIC</string>
-    <string name="tab_video">🎬 VIDEO</string>
+    <string name="tab_music">MUSIC</string>
+    <string name="tab_video">VIDEO</string>
     <string name="empty_music">Chưa có bài nhạc trên USB</string>
     <string name="empty_video">Chưa có video trên USB</string>
+    <string name="empty_search">Không có kết quả</string>
+    <string name="search_hint">Tìm bài hát, nghệ sĩ, file…</string>
+    <string name="search_hint_video">Tìm video, tên file…</string>
+    <string name="sort_label">SORT: %1$s</string>
+    <string name="sort_az">A → Z</string>
+    <string name="sort_za">Z → A</string>
+    <string name="sort_newest">Newest</string>
+    <string name="sort_oldest">Oldest</string>
+    <string name="sort_artist">Artist</string>
+    <string name="sort_album">Album</string>
+    <string name="sort_title">SORT</string>
     <string name="play_glyph">▶</string>
     <string name="music_glyph">🎵</string>
     <string name="video_glyph">🎬</string>
