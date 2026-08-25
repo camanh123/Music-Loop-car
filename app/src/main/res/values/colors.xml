@@ -16,4 +16,6 @@
     <color name="launcher_foreground">#E0A100</color>
     <color name="status_online">#3DDC84</color>
     <color name="status_offline">#E85D4C</color>
+    <color name="bg_search">#101820</color>
+    <color name="bg_row_current">#2A2410</color>
 </resources>

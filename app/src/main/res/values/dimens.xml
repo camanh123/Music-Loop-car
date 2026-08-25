@@ -7,8 +7,10 @@
     <dimen name="panel_gap">16dp</dimen>
     <dimen name="button_min_size">64dp</dimen>
     <dimen name="button_height">64dp</dimen>
-    <dimen name="player_button_height">56dp</dimen>
-    <dimen name="tab_height">56dp</dimen>
+    <dimen name="player_button_height">64dp</dimen>
+    <dimen name="player_button_width">96dp</dimen>
+    <dimen name="tab_height">60dp</dimen>
+    <dimen name="search_height">56dp</dimen>
     <dimen name="button_text">18sp</dimen>
     <dimen name="header_title">28sp</dimen>
     <dimen name="status_text">18sp</dimen>
