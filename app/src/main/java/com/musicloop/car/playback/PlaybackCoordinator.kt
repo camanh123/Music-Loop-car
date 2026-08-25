@@ -205,7 +205,12 @@ class PlaybackCoordinator(
                 is ResolveResult.Ready -> {
                     try {
                         withContext(mainDispatcher) {
-                            engine.prepareAndPlay(resolved.absolutePath)
+                            engine.prepareAndPlay(
+                                absolutePath = resolved.absolutePath,
+                                title = item.displayTitle,
+                                artist = item.displayArtist,
+                                mediaId = "${item.volumeId}:${item.relativePath}"
+                            )
                         }
                         _state.update { it.copy(status = PlayStatus.PLAYING, errorMessage = null) }
                     } catch (_: Exception) {

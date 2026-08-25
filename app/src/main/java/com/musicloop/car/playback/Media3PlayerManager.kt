@@ -5,7 +5,10 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -34,7 +37,17 @@ class Media3PlayerManager(
     private val appContext = context.applicationContext
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    val player: ExoPlayer = ExoPlayer.Builder(appContext).build()
+    val player: ExoPlayer = ExoPlayer.Builder(appContext).build().also { exo ->
+        exo.setHandleAudioBecomingNoisy(true)
+        exo.setWakeMode(C.WAKE_MODE_LOCAL)
+        exo.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(C.USAGE_MEDIA)
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .build(),
+            true
+        )
+    }
 
     @Volatile
     private var lastPreparedPath: String? = null
@@ -46,7 +59,7 @@ class Media3PlayerManager(
     private var lastUri: Uri? = null
 
     private val engine = object : PlaybackEngine {
-        override fun prepareAndPlay(absolutePath: String) {
+        override fun prepareAndPlay(absolutePath: String, title: String?, artist: String?, mediaId: String?) {
             runOnMainBlocking {
                 val file = File(absolutePath)
                 val mime = PlaybackMime.fromFileName(file.name)
@@ -63,6 +76,14 @@ class Media3PlayerManager(
                 )
                 val mediaItem = MediaItem.Builder()
                     .setUri(uri)
+                    .setMediaId(mediaId ?: file.name)
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(title?.takeIf { it.isNotBlank() } ?: file.name)
+                            .setArtist(artist.orEmpty())
+                            .setIsPlayable(true)
+                            .build()
+                    )
                     .apply {
                         if (mime != null) {
                             setMimeType(mime)
@@ -119,6 +140,8 @@ class Media3PlayerManager(
         scope = scope
     )
 
+    val sessionPlayer: Player by lazy { CoordinatorForwardingPlayer(player, coordinator) }
+
     val state = coordinator.state
 
     private val pollRunnable = object : Runnable {
@@ -141,6 +164,7 @@ class Media3PlayerManager(
                 Player.STATE_BUFFERING -> { /* coordinator already set BUFFERING */ }
                 else -> Unit
             }
+            syncSessionService()
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -157,7 +181,10 @@ class Media3PlayerManager(
             Log.i(USB_LOG, "playback_error $formatted")
             val message = error.message?.takeIf { it.isNotBlank() } ?: error.errorCodeName
             coordinator.onEngineError(message)
-            runOnMain { stopAndDropUsbMedia("player_error") }
+            runOnMain {
+                stopAndDropUsbMedia("player_error")
+                syncSessionService()
+            }
         }
     }
 
@@ -167,6 +194,11 @@ class Media3PlayerManager(
     }
 
     fun playItem(row: MediaListRow) {
+        if (row.mediaType == "AUDIO") {
+            MusicLoopPlaybackService.ensureStarted(appContext)
+        } else {
+            MusicLoopPlaybackService.stop(appContext)
+        }
         coordinator.markStarting(row.toPlayable())
         scope.launch {
             val queue = try {
@@ -186,12 +218,27 @@ class Media3PlayerManager(
         }
     }
 
-    fun playPause() = coordinator.playPause()
-    fun pause() = coordinator.pause()
-    fun next() = coordinator.next()
-    fun previous() = coordinator.previous()
+    fun playPause() {
+        coordinator.playPause()
+        syncSessionService()
+    }
+    fun pause() {
+        coordinator.pause()
+        syncSessionService()
+    }
+    fun next() {
+        coordinator.next()
+        syncSessionService()
+    }
+    fun previous() {
+        coordinator.previous()
+        syncSessionService()
+    }
     fun seekTo(positionMs: Long) = coordinator.seekTo(positionMs)
-    fun stop() = coordinator.stop()
+    fun stop() {
+        coordinator.stop()
+        syncSessionService()
+    }
 
     fun onOnlineVolumesChanged(onlineVolumeIds: Set<String>) {
         coordinator.onOnlineVolumesChanged(onlineVolumeIds)
@@ -205,12 +252,21 @@ class Media3PlayerManager(
         runOnMain {
             coordinator.abandonUsbPlayback(reason)
             stopAndDropUsbMedia(reason)
+            syncSessionService()
         }
     }
 
     fun release() {
         mainHandler.removeCallbacks(pollRunnable)
         coordinator.release()
+    }
+
+    private fun syncSessionService() {
+        if (BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value)) {
+            MusicLoopPlaybackService.ensureStarted(appContext)
+        } else {
+            MusicLoopPlaybackService.stop(appContext)
+        }
     }
 
     private fun stopAndDropUsbMedia(reason: String) {
