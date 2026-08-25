@@ -25,6 +25,11 @@ class BackgroundPlaybackPolicyTest {
         assertTrue(BackgroundPlaybackPolicy.shouldHoldService(audio.copy(status = PlayStatus.BUFFERING)))
         assertFalse(BackgroundPlaybackPolicy.shouldHoldService(audio.copy(status = PlayStatus.STOPPED)))
         assertFalse(BackgroundPlaybackPolicy.shouldHoldService(audio.copy(status = PlayStatus.ERROR)))
+        assertFalse(
+            BackgroundPlaybackPolicy.shouldHoldService(
+                audio.copy(status = PlayStatus.PAUSED, needsPrepare = true)
+            )
+        )
     }
 
     @Test

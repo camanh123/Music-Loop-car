@@ -38,7 +38,13 @@ data class PlaybackUiState(
     val current: PlayableRef? = null,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /**
+     * True after USB media was dropped. Identity may still be shown, but the
+     * engine must prepare again before play. Background service must not be
+     * held until the user explicitly resumes.
+     */
+    val needsPrepare: Boolean = false
 )
 
 sealed class ResolveResult {

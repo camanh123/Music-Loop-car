@@ -27,6 +27,14 @@ class CoordinatorForwardingPlayer(
         coordinator.pause()
     }
 
+    override fun setPlayWhenReady(playWhenReady: Boolean) {
+        if (playWhenReady) {
+            coordinator.resume()
+        } else {
+            coordinator.pause()
+        }
+    }
+
     override fun seekTo(positionMs: Long) {
         coordinator.seekTo(positionMs)
     }

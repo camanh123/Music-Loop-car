@@ -12,6 +12,9 @@ object BackgroundPlaybackPolicy {
         if (state.current == null || state.current.mediaType != "AUDIO") {
             return false
         }
+        if (state.needsPrepare) {
+            return false
+        }
         return when (state.status) {
             PlayStatus.PLAYING, PlayStatus.PAUSED, PlayStatus.BUFFERING, PlayStatus.ENDED -> true
             PlayStatus.IDLE, PlayStatus.STOPPED, PlayStatus.ERROR -> false

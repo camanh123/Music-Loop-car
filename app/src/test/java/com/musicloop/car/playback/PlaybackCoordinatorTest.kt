@@ -182,6 +182,86 @@ class PlaybackCoordinatorTest {
         assertFalse(VideoPlaybackGuard.shouldExitForUsbLoss("clip.mp4", coordinator.state.value))
     }
 
+    @Test
+    fun audioFocusLossPausesWithoutDroppingServiceHold() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        coordinator.onEnginePausedBySystem()
+        assertEquals(PlayStatus.PAUSED, coordinator.state.value.status)
+        assertEquals("song.mp3", coordinator.state.value.current?.relativePath)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+        assertFalse(engine.stopped)
+        coordinator.onEngineResumedBySystem()
+        assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
+    fun systemPauseDoesNotOverrideUsbDisconnect() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        coordinator.abandonUsbPlayback("BROADCAST_EJECT")
+        coordinator.onEnginePausedBySystem()
+        coordinator.onEngineResumedBySystem()
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertEquals("USB disconnected", coordinator.state.value.errorMessage)
+        assertFalse(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
+    fun usbReconnectRestoresPausedIdentityWithoutAutoplay() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        coordinator.onOnlineVolumesChanged(emptySet())
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertTrue(engine.stopped)
+        assertFalse(engine.playing)
+        coordinator.onOnlineVolumesChanged(setOf("AAAA-AAAA"))
+        assertEquals(PlayStatus.PAUSED, coordinator.state.value.status)
+        assertEquals(null, coordinator.state.value.errorMessage)
+        assertEquals("song.mp3", coordinator.state.value.current?.relativePath)
+        assertTrue(coordinator.state.value.needsPrepare)
+        assertFalse(engine.playing)
+        assertEquals(null, engine.preparedPath)
+        assertFalse(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
+    fun resumeAfterUsbReconnectPreparesAgain() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("song.mp3")), 0)
+        coordinator.abandonUsbPlayback("BROADCAST_EJECT")
+        coordinator.onOnlineVolumesChanged(setOf("AAAA-AAAA"))
+        assertEquals(PlayStatus.PAUSED, coordinator.state.value.status)
+        coordinator.resume()
+        assertTrue(engine.playing)
+        assertEquals("/mnt/media_rw/AAAA-AAAA/song.mp3", engine.preparedPath)
+        assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
+        assertFalse(coordinator.state.value.needsPrepare)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
+    fun sessionTransportPlayPauseSeekAndSkip() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.pause()
+        assertFalse(engine.playing)
+        coordinator.resume()
+        assertTrue(engine.playing)
+        coordinator.seekTo(2_500L)
+        assertEquals(listOf(2_500L), engine.seeks)
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        coordinator.skipToPrevious()
+        assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
+    }
+
     private fun coordinator(
         engine: FakePlaybackEngine,
         onlineRoot: String = "/mnt/media_rw/AAAA-AAAA",
