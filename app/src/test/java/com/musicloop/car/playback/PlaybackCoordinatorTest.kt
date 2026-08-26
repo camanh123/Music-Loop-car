@@ -262,6 +262,75 @@ class PlaybackCoordinatorTest {
         assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
     }
 
+    @Test
+    fun inAppNextConsumesExplicitQueueThenResumesLibrary() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.playNext(track("n.mp3"))
+        coordinator.next()
+        assertTrue(engine.preparedPath!!.endsWith("n.mp3"))
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        coordinator.next()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+    }
+
+    @Test
+    fun playNextInsertsAheadOfAddToQueue() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.addToQueue(track("queued.mp3"))
+        coordinator.playNext(track("next.mp3"))
+        assertEquals(listOf("next.mp3", "queued.mp3"), coordinator.explicitQueue.value.map { it.relativePath })
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("next.mp3"))
+        assertEquals(listOf("queued.mp3"), coordinator.explicitQueue.value.map { it.relativePath })
+    }
+
+    @Test
+    fun skipToNextConsumesExplicitQueueThenFallsBackToLibrary() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        coordinator.addToQueue(track("q.mp3"))
+        assertTrue(coordinator.hasNextItem())
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("q.mp3"))
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+    }
+
+    @Test
+    fun explicitQueueGivesMediaSessionNextAtLastLibraryItem() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 1)
+        assertFalse(coordinator.hasNextItem())
+        coordinator.addToQueue(track("bonus.mp3"))
+        assertTrue(coordinator.hasNextItem())
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("bonus.mp3"))
+        assertFalse(coordinator.hasNextItem())
+        coordinator.skipToNext()
+        assertTrue(engine.preparedPath!!.endsWith("bonus.mp3"))
+    }
+
+    @Test
+    fun removeAndClearExplicitQueue() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3")), 0)
+        coordinator.addToQueue(track("q1.mp3"))
+        coordinator.addToQueue(track("q2.mp3"))
+        coordinator.removeQueued(0)
+        assertEquals(listOf("q2.mp3"), coordinator.explicitQueue.value.map { it.relativePath })
+        coordinator.clearExplicitQueue()
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        assertFalse(coordinator.hasNextItem())
+    }
+
     private fun coordinator(
         engine: FakePlaybackEngine,
         onlineRoot: String = "/mnt/media_rw/AAAA-AAAA",

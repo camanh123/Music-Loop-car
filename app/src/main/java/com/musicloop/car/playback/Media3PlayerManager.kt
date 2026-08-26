@@ -258,6 +258,41 @@ class Media3PlayerManager(
         syncSessionService()
     }
 
+    fun playNext(row: MediaListRow) {
+        coordinator.playNext(row.toPlayable())
+        syncSessionService()
+    }
+
+    fun enqueue(row: MediaListRow) {
+        coordinator.addToQueue(row.toPlayable())
+        syncSessionService()
+    }
+
+    fun removeQueued(index: Int) {
+        coordinator.removeQueued(index)
+        syncSessionService()
+    }
+
+    fun clearExplicitQueue() {
+        coordinator.clearExplicitQueue()
+        syncSessionService()
+    }
+
+    fun playItems(items: List<MediaListRow>, startIndex: Int) {
+        val audio = items.getOrNull(startIndex)?.mediaType != "VIDEO"
+        if (audio) {
+            MusicLoopPlaybackService.ensureStarted(appContext)
+        } else {
+            MusicLoopPlaybackService.stop(appContext)
+        }
+        val playable = items.map { it.toPlayable() }
+        if (playable.isEmpty() || startIndex !in playable.indices) {
+            return
+        }
+        coordinator.markStarting(playable[startIndex])
+        coordinator.playQueue(playable, startIndex)
+    }
+
     fun onOnlineVolumesChanged(onlineVolumeIds: Set<String>) {
         coordinator.onOnlineVolumesChanged(onlineVolumeIds)
         syncSessionService()

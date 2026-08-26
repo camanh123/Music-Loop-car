@@ -8,7 +8,8 @@ class LibraryUiStoreTest {
     @Test
     fun tabPersistenceRoundTrip() {
         assertEquals(LibraryTab.VIDEO, LibraryUiStore.tabFrom("VIDEO"))
-        assertEquals(LibraryTab.MUSIC, LibraryUiStore.tabFrom("MUSIC"))
+        assertEquals(LibraryTab.FAVORITES, LibraryUiStore.tabFrom("FAVORITES"))
+        assertEquals(LibraryTab.PLAYLISTS, LibraryUiStore.tabFrom("PLAYLISTS"))
         assertEquals(LibraryTab.MUSIC, LibraryUiStore.tabFrom(null))
         assertEquals(LibraryTab.MUSIC, LibraryUiStore.tabFrom("nope"))
     }

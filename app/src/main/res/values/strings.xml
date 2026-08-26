@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2D.1 — Car library UX. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2D.2 — Favorites, playlists, queue. USB stays read-only.</string>
     <string name="playback_notification_channel">MusicLoop playback</string>
     <string name="playback_notification_placeholder">Playing USB audio</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
@@ -49,6 +49,27 @@
     <string name="library_counts_placeholder">Audio: 0    Video: 0    Total: 0</string>
     <string name="tab_music">MUSIC</string>
     <string name="tab_video">VIDEO</string>
+    <string name="tab_favorites">FAVORITES</string>
+    <string name="tab_playlists">LISTS</string>
+    <string name="favorite_on">♥</string>
+    <string name="favorite_off">♡</string>
+    <string name="more">⋮</string>
+    <string name="queue">QUEUE</string>
+    <string name="queue_empty">Queue is empty</string>
+    <string name="queue_clear">Clear queue</string>
+    <string name="play_next">Play Next</string>
+    <string name="add_to_queue">Add to Queue</string>
+    <string name="add_to_playlist">Add to Playlist</string>
+    <string name="playlist_new">NEW LIST</string>
+    <string name="playlist_rename">Rename</string>
+    <string name="playlist_remove">Delete list</string>
+    <string name="playlist_remove_item">Remove</string>
+    <string name="playlist_play">Play list</string>
+    <string name="playlist_name_hint">Playlist name</string>
+    <string name="unavailable">Unavailable</string>
+    <string name="playlist_back">BACK</string>
+    <string name="empty_favorites">Chưa có bài yêu thích</string>
+    <string name="empty_playlists">Chưa có playlist</string>
     <string name="empty_music">Chưa có bài nhạc trên USB</string>
     <string name="empty_video">Chưa có video trên USB</string>
     <string name="empty_search">Không có kết quả</string>

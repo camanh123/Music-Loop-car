@@ -23,17 +23,37 @@
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:text="@string/tab_music"
-            android:textSize="20sp" />
+            android:textSize="16sp" />
 
         <Button
             android:id="@+id/tabVideo"
             style="@style/Widget.MusicLoopCar.TransportButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/tab_height"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="8dp"
             android:layout_weight="1"
             android:text="@string/tab_video"
-            android:textSize="20sp" />
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/tabFavorites"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/tab_height"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:text="@string/tab_favorites"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/tabPlaylists"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/tab_height"
+            android:layout_marginEnd="12dp"
+            android:layout_weight="1"
+            android:text="@string/tab_playlists"
+            android:textSize="16sp" />
 
         <TextView
             android:id="@+id/usbStatus"
@@ -94,8 +114,29 @@
             style="@style/Widget.MusicLoopCar.TransportButton"
             android:layout_width="wrap_content"
             android:layout_height="@dimen/search_height"
-            android:minWidth="168dp"
+            android:layout_marginEnd="8dp"
+            android:minWidth="140dp"
             android:text="@string/sort_az"
+            android:textSize="16sp" />
+
+        <Button
+            android:id="@+id/buttonNewPlaylist"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:layout_marginEnd="8dp"
+            android:minWidth="96dp"
+            android:text="@string/playlist_new"
+            android:textSize="16sp"
+            android:visibility="gone" />
+
+        <Button
+            android:id="@+id/buttonQueue"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:minWidth="96dp"
+            android:text="@string/queue"
             android:textSize="16sp" />
     </LinearLayout>
 

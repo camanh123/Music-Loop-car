@@ -49,8 +49,29 @@
         android:id="@+id/playGlyph"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
         android:text="@string/play_glyph"
         android:textColor="@color/accent"
         android:textSize="22sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/buttonFavorite"
+        android:layout_width="@dimen/row_action_size"
+        android:layout_height="@dimen/row_action_size"
+        android:gravity="center"
+        android:text="@string/favorite_off"
+        android:textColor="@color/text_muted"
+        android:textSize="26sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/buttonMore"
+        android:layout_width="@dimen/row_action_size"
+        android:layout_height="@dimen/row_action_size"
+        android:gravity="center"
+        android:text="@string/more"
+        android:textColor="@color/text_primary"
+        android:textSize="28sp"
         android:visibility="gone" />
 </LinearLayout>

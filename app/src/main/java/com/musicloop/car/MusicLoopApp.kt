@@ -8,6 +8,8 @@ import android.os.Build
 import com.musicloop.car.database.AppDatabase
 import com.musicloop.car.database.LibraryRepository
 import com.musicloop.car.database.RoomLibraryRepository
+import com.musicloop.car.database.RoomUserCollectionsRepository
+import com.musicloop.car.database.UserCollectionsRepository
 import com.musicloop.car.library.AndroidMetadataReader
 import com.musicloop.car.library.LibraryMediaScanner
 import com.musicloop.car.playback.Media3PlayerManager
@@ -33,6 +35,9 @@ class MusicLoopApp : Application() {
     lateinit var playerManager: Media3PlayerManager
         private set
 
+    lateinit var collections: UserCollectionsRepository
+        private set
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mountReceiver = UsbMountReceiver()
 
@@ -40,6 +45,7 @@ class MusicLoopApp : Application() {
         super.onCreate()
         database = AppDatabase.create(this)
         repository = RoomLibraryRepository(database)
+        collections = RoomUserCollectionsRepository(database)
         val storage = UsbStorageManager(this)
         val scanner = LibraryMediaScanner(
             repository = repository,
