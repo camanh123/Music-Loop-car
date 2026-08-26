@@ -27,6 +27,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.musicloop.car.databinding.ActivityMainBinding
 import com.musicloop.car.databinding.ItemMediaBinding
 import com.musicloop.car.library.CollectionRows
+import com.musicloop.car.library.LibraryEmptyState
 import com.musicloop.car.library.LibraryListQuery
 import com.musicloop.car.library.LibrarySort
 import com.musicloop.car.library.LibraryTab
@@ -48,7 +49,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2D.2 car library UI: favorites, playlists, session queue.
+ * Phase 2D.3 car library UX polish for 1280x720. USB stays read-only.
  * Audio plays in-place. Video opens PlayerView. USB stays read-only.
  */
 class MainActivity : AppCompatActivity() {
@@ -194,9 +195,10 @@ class MainActivity : AppCompatActivity() {
                 musicLoopApp().collections.observeFavorites().collect { rows ->
                     favoriteEntities = rows
                     favoriteKeys = rows.map { it.volumeId to it.relativePath }.toSet()
-                    mediaAdapter.setFavorites(favoriteKeys)
                     if (libraryTab == LibraryTab.FAVORITES) {
                         showFiltered()
+                    } else {
+                        mediaAdapter.setFavorites(favoriteKeys)
                     }
                 }
             }
@@ -461,19 +463,48 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        mediaAdapter.submit(filtered)
-        mediaAdapter.setFavorites(favoriteKeys)
-        mediaAdapter.setCurrent(lastPlayback.current?.volumeId, lastPlayback.current?.relativePath)
-        binding.emptyHint.visibility = if (filtered.isEmpty()) View.VISIBLE else View.GONE
-        binding.emptyHint.setText(
-            when {
-                searchQuery.isNotBlank() -> R.string.empty_search
-                libraryTab == LibraryTab.MUSIC -> R.string.empty_music
-                libraryTab == LibraryTab.VIDEO -> R.string.empty_video
-                libraryTab == LibraryTab.FAVORITES -> R.string.empty_favorites
-                else -> R.string.empty_playlists
-            }
+        mediaAdapter.bindList(
+            items = filtered,
+            favorites = favoriteKeys,
+            currentVolumeId = lastPlayback.current?.volumeId,
+            currentRelativePath = lastPlayback.current?.relativePath
         )
+        val overlay = LibraryEmptyState.listOverlay(
+            tab = libraryTab,
+            query = searchQuery,
+            usbOnline = usbOnline,
+            listEmpty = filtered.isEmpty(),
+            playlistOpen = openPlaylistId != null
+        )
+        when (overlay) {
+            null, LibraryEmptyState.Overlay.USB_DIAGNOSTIC -> {
+                binding.emptyHint.visibility = View.GONE
+            }
+            LibraryEmptyState.Overlay.SEARCH -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_search)
+            }
+            LibraryEmptyState.Overlay.MUSIC -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_music)
+            }
+            LibraryEmptyState.Overlay.VIDEO -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_video)
+            }
+            LibraryEmptyState.Overlay.FAVORITES -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_favorites)
+            }
+            LibraryEmptyState.Overlay.PLAYLISTS -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_playlists)
+            }
+            LibraryEmptyState.Overlay.PLAYLIST_ITEMS -> {
+                binding.emptyHint.visibility = View.VISIBLE
+                binding.emptyHint.setText(R.string.empty_playlist_items)
+            }
+        }
         if (libraryTab == LibraryTab.VIDEO && searchQuery.isBlank()) {
             restoreVideoScrollIfNeeded()
         }
@@ -752,18 +783,19 @@ class MainActivity : AppCompatActivity() {
     private fun showQueue() {
         val queued = musicLoopApp().playerManager.coordinator.explicitQueue.value
         if (queued.isEmpty()) {
-            Toast.makeText(this, R.string.queue_empty, Toast.LENGTH_SHORT).show()
+            AlertDialog.Builder(this)
+                .setTitle(R.string.queue)
+                .setMessage(R.string.queue_empty)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
             return
         }
         val labels = queued.map { it.displayTitle }.toTypedArray()
         AlertDialog.Builder(this)
-            .setTitle(R.string.queue)
+            .setTitle(getString(R.string.queue_title, queued.size))
             .setItems(labels) { _, which ->
-                AlertDialog.Builder(this)
-                    .setItems(arrayOf(getString(R.string.playlist_remove_item))) { _, _ ->
-                        musicLoopApp().playerManager.removeQueued(which)
-                    }
-                    .show()
+                musicLoopApp().playerManager.removeQueued(which)
+                showQueue()
             }
             .setNeutralButton(R.string.queue_clear) { _, _ ->
                 musicLoopApp().playerManager.clearExplicitQueue()
@@ -818,11 +850,23 @@ class MainActivity : AppCompatActivity() {
             setHasStableIds(true)
         }
 
-        fun submit(items: List<MediaListRow>) {
-            if (items == rows) {
+        fun bindList(
+            items: List<MediaListRow>,
+            favorites: Set<Pair<String, String>>,
+            currentVolumeId: String?,
+            currentRelativePath: String?
+        ) {
+            if (items == rows &&
+                favorites == favoriteKeys &&
+                currentVolumeId == this.currentVolumeId &&
+                currentRelativePath == this.currentRelativePath
+            ) {
                 return
             }
             rows = items
+            favoriteKeys = favorites
+            this.currentVolumeId = currentVolumeId
+            this.currentRelativePath = currentRelativePath
             notifyDataSetChanged()
         }
 
@@ -831,7 +875,10 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             favoriteKeys = keys
-            notifyDataSetChanged()
+            val count = rows.size
+            if (count > 0) {
+                notifyItemRangeChanged(0, count)
+            }
         }
 
         fun setCurrent(volumeId: String?, relativePath: String?) {
@@ -892,6 +939,7 @@ class MainActivity : AppCompatActivity() {
                     isVideo -> binding.root.context.getString(R.string.video_glyph)
                     else -> binding.root.context.getString(R.string.music_glyph)
                 }
+                binding.typeGlyph.alpha = if (row.available) 1f else 0.4f
                 binding.titleText.text = row.title?.takeIf { it.isNotBlank() } ?: row.fileName
                 binding.titleText.setTextColor(
                     ContextCompat.getColor(
@@ -900,7 +948,13 @@ class MainActivity : AppCompatActivity() {
                     )
                 )
                 binding.subtitleText.text = subtitle(row)
-                binding.playGlyph.visibility = if (current) View.VISIBLE else View.GONE
+                binding.subtitleText.setTextColor(
+                    ContextCompat.getColor(
+                        binding.root.context,
+                        if (row.available) R.color.text_secondary else R.color.status_offline
+                    )
+                )
+                binding.playGlyph.visibility = if (current) View.VISIBLE else View.INVISIBLE
                 binding.root.setBackgroundResource(
                     if (current) R.drawable.bg_media_row_current else R.drawable.bg_media_row
                 )

@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2D.2 — Favorites, playlists, queue. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2D — Car library UX. USB stays read-only.</string>
     <string name="playback_notification_channel">MusicLoop playback</string>
     <string name="playback_notification_placeholder">Playing USB audio</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
@@ -11,7 +11,7 @@
     <string name="usb_ready">USB: READY</string>
     <string name="usb_scanning">USB: SCANNING</string>
     <string name="usb_offline">USB: OFFLINE</string>
-    <string name="usb_not_detected">USB: NOT DETECTED BY ANDROID</string>
+    <string name="usb_not_detected">NO USB</string>
     <string name="usb_error">USB: ERROR</string>
     <string name="usb_not_detected_user">USB chưa được Android nhận diện.\nHãy kiểm tra/cắm lại USB hoặc thử cổng USB khác.</string>
     <string name="usb_not_detected_os">CARFU/Android hiện chưa nhận USB.\nMusicLoop không thể mount USB ở cấp ứng dụng.</string>
@@ -49,13 +49,14 @@
     <string name="library_counts_placeholder">Audio: 0    Video: 0    Total: 0</string>
     <string name="tab_music">MUSIC</string>
     <string name="tab_video">VIDEO</string>
-    <string name="tab_favorites">FAVORITES</string>
+    <string name="tab_favorites">♥ FAV</string>
     <string name="tab_playlists">LISTS</string>
     <string name="favorite_on">♥</string>
     <string name="favorite_off">♡</string>
     <string name="more">⋮</string>
     <string name="queue">QUEUE</string>
-    <string name="queue_empty">Queue is empty</string>
+    <string name="queue_empty">Chưa có bài trong queue</string>
+    <string name="queue_title">QUEUE (%1$d)</string>
     <string name="queue_clear">Clear queue</string>
     <string name="play_next">Play Next</string>
     <string name="add_to_queue">Add to Queue</string>
@@ -70,9 +71,10 @@
     <string name="playlist_back">BACK</string>
     <string name="empty_favorites">Chưa có bài yêu thích</string>
     <string name="empty_playlists">Chưa có playlist</string>
+    <string name="empty_playlist_items">Playlist trống</string>
     <string name="empty_music">Chưa có bài nhạc trên USB</string>
     <string name="empty_video">Chưa có video trên USB</string>
-    <string name="empty_search">Không có kết quả</string>
+    <string name="empty_search">Không tìm thấy</string>
     <string name="search_hint">Tìm bài hát, nghệ sĩ, file…</string>
     <string name="search_hint_video">Tìm video, tên file…</string>
     <string name="sort_label">SORT: %1$s</string>
