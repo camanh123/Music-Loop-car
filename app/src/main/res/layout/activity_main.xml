@@ -22,44 +22,24 @@
             android:layout_height="@dimen/tab_height"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            android:text="@string/tab_music"
-            android:textSize="16sp" />
+            android:text="@string/tab_music" />
 
         <Button
             android:id="@+id/tabVideo"
             style="@style/Widget.MusicLoopCar.TransportButton"
             android:layout_width="0dp"
             android:layout_height="@dimen/tab_height"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:text="@string/tab_video"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/tabFavorites"
-            style="@style/Widget.MusicLoopCar.TransportButton"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/tab_height"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1"
-            android:text="@string/tab_favorites"
-            android:textSize="16sp" />
-
-        <Button
-            android:id="@+id/tabPlaylists"
-            style="@style/Widget.MusicLoopCar.TransportButton"
-            android:layout_width="0dp"
-            android:layout_height="@dimen/tab_height"
             android:layout_marginEnd="12dp"
             android:layout_weight="1"
-            android:text="@string/tab_playlists"
-            android:textSize="16sp" />
+            android:text="@string/tab_video" />
 
         <TextView
             android:id="@+id/usbStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:text="@string/usb_offline"
             android:textColor="@color/status_offline"
             android:textSize="@dimen/status_text"
@@ -72,8 +52,7 @@
             android:layout_height="@dimen/tab_height"
             android:layout_marginEnd="8dp"
             android:minWidth="148dp"
-            android:text="@string/reload_usb"
-            android:textSize="16sp" />
+            android:text="@string/reload_usb" />
 
         <Button
             android:id="@+id/buttonCapability"
@@ -115,9 +94,8 @@
             android:layout_width="wrap_content"
             android:layout_height="@dimen/search_height"
             android:layout_marginEnd="8dp"
-            android:minWidth="140dp"
-            android:text="@string/sort_az"
-            android:textSize="16sp" />
+            android:minWidth="132dp"
+            android:text="@string/sort_az" />
 
         <Button
             android:id="@+id/buttonNewPlaylist"
@@ -127,29 +105,45 @@
             android:layout_marginEnd="8dp"
             android:minWidth="96dp"
             android:text="@string/playlist_new"
-            android:textSize="16sp"
             android:visibility="gone" />
+
+        <Button
+            android:id="@+id/tabFavorites"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:layout_marginEnd="8dp"
+            android:minWidth="88dp"
+            android:text="@string/tab_favorites" />
+
+        <Button
+            android:id="@+id/tabPlaylists"
+            style="@style/Widget.MusicLoopCar.TransportButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:layout_marginEnd="8dp"
+            android:minWidth="88dp"
+            android:text="@string/tab_playlists" />
 
         <Button
             android:id="@+id/buttonQueue"
             style="@style/Widget.MusicLoopCar.TransportButton"
             android:layout_width="wrap_content"
             android:layout_height="@dimen/search_height"
-            android:minWidth="96dp"
-            android:text="@string/queue"
-            android:textSize="16sp" />
+            android:minWidth="104dp"
+            android:text="@string/queue" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/scanStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="4dp"
         android:ellipsize="end"
         android:maxLines="1"
         android:text="@string/state_idle"
         android:textColor="@color/text_secondary"
-        android:textSize="16sp" />
+        android:textSize="15sp" />
 
     <TextView
         android:id="@+id/diagnosticText"
@@ -196,7 +190,7 @@
             android:padding="24dp"
             android:text="@string/empty_music"
             android:textColor="@color/text_muted"
-            android:textSize="20sp"
+            android:textSize="24sp"
             android:visibility="gone" />
     </FrameLayout>
 
@@ -223,6 +217,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="12dp"
                 android:layout_weight="1"
+                android:minWidth="0dp"
                 android:orientation="vertical">
 
                 <TextView
@@ -233,7 +228,7 @@
                     android:maxLines="1"
                     android:text="@string/player_idle"
                     android:textColor="@color/text_primary"
-                    android:textSize="24sp"
+                    android:textSize="22sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -243,7 +238,7 @@
                     android:ellipsize="end"
                     android:maxLines="1"
                     android:textColor="@color/text_secondary"
-                    android:textSize="18sp" />
+                    android:textSize="16sp" />
             </LinearLayout>
 
             <Button
@@ -261,7 +256,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="@dimen/player_button_height"
                 android:layout_marginEnd="8dp"
-                android:minWidth="@dimen/player_button_width"
+                android:minWidth="@dimen/player_play_width"
                 android:text="@string/play" />
 
             <Button
@@ -277,11 +272,13 @@
             android:id="@+id/audioSeekBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
+            android:layout_marginTop="4dp"
             android:max="1000"
-            android:minHeight="28dp"
+            android:minHeight="@dimen/seek_touch"
             android:paddingStart="0dp"
-            android:paddingEnd="0dp" />
+            android:paddingEnd="0dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp" />
 
         <LinearLayout
             android:layout_width="match_parent"
