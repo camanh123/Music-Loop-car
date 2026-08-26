@@ -4,7 +4,9 @@ import java.util.Locale
 
 enum class LibraryTab {
     MUSIC,
-    VIDEO
+    VIDEO,
+    FAVORITES,
+    PLAYLISTS
 }
 
 enum class LibrarySort {
@@ -21,7 +23,7 @@ enum class LibrarySort {
  * No USB I/O, no scanner, no Room queries.
  */
 object LibraryListQuery {
-    fun mediaType(tab: LibraryTab): String = if (tab == LibraryTab.MUSIC) "AUDIO" else "VIDEO"
+    fun mediaType(tab: LibraryTab): String = if (tab == LibraryTab.VIDEO) "VIDEO" else "AUDIO"
 
     fun matchesSearch(row: MediaListRow, query: String, tab: LibraryTab): Boolean {
         val needle = query.trim().lowercase(Locale.ROOT)

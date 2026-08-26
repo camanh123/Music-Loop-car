@@ -27,6 +27,9 @@ class PlaybackCoordinator(
     private var queue: List<PlayableRef> = emptyList()
     private var index: Int = -1
     private var needsPrepare: Boolean = false
+    private val explicitItems = ArrayList<PlayableRef>()
+    private val _explicitQueue = MutableStateFlow<List<PlayableRef>>(emptyList())
+    val explicitQueue: StateFlow<List<PlayableRef>> = _explicitQueue.asStateFlow()
 
     fun markStarting(item: PlayableRef) {
         _state.update {
@@ -85,6 +88,9 @@ class PlaybackCoordinator(
     }
 
     fun next() {
+        if (consumeExplicitQueueItem()) {
+            return
+        }
         if (queue.isEmpty()) {
             return
         }
@@ -100,12 +106,20 @@ class PlaybackCoordinator(
         playCurrent()
     }
 
-    fun hasNextItem(): Boolean = index >= 0 && index < queue.lastIndex
+    fun hasNextItem(): Boolean {
+        if (explicitItems.isNotEmpty()) {
+            return true
+        }
+        return index >= 0 && index < queue.lastIndex
+    }
 
     fun hasPreviousItem(): Boolean = index > 0
 
     fun skipToNext() {
-        if (!hasNextItem()) {
+        if (consumeExplicitQueueItem()) {
+            return
+        }
+        if (!hasLibraryNext()) {
             return
         }
         index += 1
@@ -118,6 +132,32 @@ class PlaybackCoordinator(
         }
         index -= 1
         playCurrent()
+    }
+
+    fun playNext(item: PlayableRef) {
+        explicitItems.add(0, item)
+        publishExplicitQueue()
+    }
+
+    fun addToQueue(item: PlayableRef) {
+        explicitItems.add(item)
+        publishExplicitQueue()
+    }
+
+    fun removeQueued(index: Int) {
+        if (index !in explicitItems.indices) {
+            return
+        }
+        explicitItems.removeAt(index)
+        publishExplicitQueue()
+    }
+
+    fun clearExplicitQueue() {
+        if (explicitItems.isEmpty()) {
+            return
+        }
+        explicitItems.clear()
+        publishExplicitQueue()
     }
 
     fun seekTo(positionMs: Long) {
@@ -226,7 +266,25 @@ class PlaybackCoordinator(
         queue = emptyList()
         index = -1
         needsPrepare = false
+        explicitItems.clear()
+        publishExplicitQueue()
         _state.value = PlaybackUiState()
+    }
+
+    private fun hasLibraryNext(): Boolean = index >= 0 && index < queue.lastIndex
+
+    private fun consumeExplicitQueueItem(): Boolean {
+        if (explicitItems.isEmpty()) {
+            return false
+        }
+        val item = explicitItems.removeAt(0)
+        publishExplicitQueue()
+        playItemInternal(item)
+        return true
+    }
+
+    private fun publishExplicitQueue() {
+        _explicitQueue.value = explicitItems.toList()
     }
 
     private fun resumeOrReplay() {
@@ -251,6 +309,10 @@ class PlaybackCoordinator(
 
     private fun playCurrent() {
         val item = queue.getOrNull(index) ?: return
+        playItemInternal(item)
+    }
+
+    private fun playItemInternal(item: PlayableRef) {
         _state.update {
             it.copy(
                 current = item,
