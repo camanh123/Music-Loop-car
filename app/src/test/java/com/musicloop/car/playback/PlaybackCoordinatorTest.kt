@@ -263,6 +263,19 @@ class PlaybackCoordinatorTest {
     }
 
     @Test
+    fun inAppNextConsumesExplicitQueueThenResumesLibrary() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.playNext(track("n.mp3"))
+        coordinator.next()
+        assertTrue(engine.preparedPath!!.endsWith("n.mp3"))
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        coordinator.next()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+    }
+
+    @Test
     fun playNextInsertsAheadOfAddToQueue() = runTest {
         val engine = FakePlaybackEngine()
         val coordinator = coordinator(engine)

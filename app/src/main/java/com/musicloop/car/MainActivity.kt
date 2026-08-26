@@ -42,6 +42,7 @@ import com.musicloop.car.storage.CapabilityReportFormatter
 import com.musicloop.car.storage.DeviceInfo
 import com.musicloop.car.storage.UsbStorageManager
 import com.musicloop.car.usb.UsbHostState
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -90,6 +91,7 @@ class MainActivity : AppCompatActivity() {
     private var playlistRecords = emptyList<com.musicloop.car.database.PlaylistRecord>()
     private var playlistItemEntities = emptyList<com.musicloop.car.database.PlaylistItemEntity>()
     private var openPlaylistId: Long? = null
+    private var playlistItemsJob: Job? = null
 
     private val videoScrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -111,10 +113,22 @@ class MainActivity : AppCompatActivity() {
         binding.tabMusic.setOnClickListener { selectTab(LibraryTab.MUSIC) }
         binding.tabVideo.setOnClickListener { selectTab(LibraryTab.VIDEO) }
         binding.tabFavorites.setOnClickListener { selectTab(LibraryTab.FAVORITES) }
-        binding.tabPlaylists.setOnClickListener { selectTab(LibraryTab.PLAYLISTS) }
+        binding.tabPlaylists.setOnClickListener {
+            if (libraryTab == LibraryTab.PLAYLISTS && openPlaylistId != null) {
+                closePlaylist()
+            } else {
+                selectTab(LibraryTab.PLAYLISTS)
+            }
+        }
         binding.buttonSort.setOnClickListener { showSortPicker() }
         binding.buttonQueue.setOnClickListener { showQueue() }
-        binding.buttonNewPlaylist.setOnClickListener { promptNewPlaylist() }
+        binding.buttonNewPlaylist.setOnClickListener {
+            if (openPlaylistId != null) {
+                closePlaylist()
+            } else {
+                promptNewPlaylist()
+            }
+        }
         binding.buttonCapability.setOnClickListener {
             withReadPermission { runCapabilityScan() }
         }
@@ -229,6 +243,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        playlistItemsJob?.cancel()
         ioExecutor.shutdownNow()
         super.onDestroy()
     }
@@ -288,9 +303,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun selectTab(tab: LibraryTab) {
         if (tab != LibraryTab.PLAYLISTS) {
-            openPlaylistId = null
+            closePlaylist(refresh = false)
         } else if (libraryTab != LibraryTab.PLAYLISTS) {
-            openPlaylistId = null
+            closePlaylist(refresh = false)
         }
         libraryTab = tab
         libraryStore.saveTab(tab)
@@ -307,6 +322,7 @@ class MainActivity : AppCompatActivity() {
         }
         binding.buttonSort.visibility = if (tab == LibraryTab.PLAYLISTS) View.GONE else View.VISIBLE
         binding.buttonNewPlaylist.visibility = if (tab == LibraryTab.PLAYLISTS) View.VISIBLE else View.GONE
+        updatePlaylistChrome()
         updateSortLabel()
         if (tab == LibraryTab.VIDEO) {
             pendingVideoScrollRestore = true
@@ -587,10 +603,39 @@ class MainActivity : AppCompatActivity() {
 
     private fun openPlaylist(id: Long) {
         openPlaylistId = id
-        lifecycleScope.launch {
-            playlistItemEntities = musicLoopApp().collections.playlistItems(id)
+        updatePlaylistChrome()
+        playlistItemsJob?.cancel()
+        playlistItemsJob = lifecycleScope.launch {
+            musicLoopApp().collections.observePlaylistItems(id).collect { items ->
+                if (openPlaylistId == id) {
+                    playlistItemEntities = items
+                    showFiltered()
+                }
+            }
+        }
+    }
+
+    private fun closePlaylist(refresh: Boolean = true) {
+        playlistItemsJob?.cancel()
+        playlistItemsJob = null
+        openPlaylistId = null
+        playlistItemEntities = emptyList()
+        updatePlaylistChrome()
+        if (refresh && libraryTab == LibraryTab.PLAYLISTS) {
             showFiltered()
         }
+    }
+
+    private fun updatePlaylistChrome() {
+        if (!::binding.isInitialized) {
+            return
+        }
+        if (libraryTab != LibraryTab.PLAYLISTS) {
+            return
+        }
+        binding.buttonNewPlaylist.text = getString(
+            if (openPlaylistId != null) R.string.playlist_back else R.string.playlist_new
+        )
     }
 
     private fun promptNewPlaylist() {
@@ -632,8 +677,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             musicLoopApp().collections.removePlaylist(id)
             if (openPlaylistId == id) {
-                openPlaylistId = null
-                showFiltered()
+                closePlaylist()
             }
         }
     }
@@ -849,6 +893,12 @@ class MainActivity : AppCompatActivity() {
                     else -> binding.root.context.getString(R.string.music_glyph)
                 }
                 binding.titleText.text = row.title?.takeIf { it.isNotBlank() } ?: row.fileName
+                binding.titleText.setTextColor(
+                    ContextCompat.getColor(
+                        binding.root.context,
+                        if (row.available) R.color.text_primary else R.color.text_muted
+                    )
+                )
                 binding.subtitleText.text = subtitle(row)
                 binding.playGlyph.visibility = if (current) View.VISIBLE else View.GONE
                 binding.root.setBackgroundResource(

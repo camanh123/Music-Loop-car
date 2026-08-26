@@ -66,7 +66,8 @@
     <string name="playlist_remove_item">Remove</string>
     <string name="playlist_play">Play list</string>
     <string name="playlist_name_hint">Playlist name</string>
-    <string name="unavailable">USB offline</string>
+    <string name="unavailable">Unavailable</string>
+    <string name="playlist_back">BACK</string>
     <string name="empty_favorites">Chưa có bài yêu thích</string>
     <string name="empty_playlists">Chưa có playlist</string>
     <string name="empty_music">Chưa có bài nhạc trên USB</string>

@@ -9,20 +9,23 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface PlaylistItemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entity: PlaylistItemEntity)
+    fun upsert(entity: PlaylistItemEntity)
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND volumeId = :volumeId AND relativePath = :relativePath")
-    suspend fun removeItem(playlistId: Long, volumeId: String, relativePath: String)
+    fun removeItem(playlistId: Long, volumeId: String, relativePath: String)
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
-    suspend fun removeForPlaylist(playlistId: Long)
+    fun removeForPlaylist(playlistId: Long)
 
     @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY position ASC, addedAt ASC")
     fun observeForPlaylist(playlistId: Long): Flow<List<PlaylistItemEntity>>
 
+    @Query("SELECT * FROM playlist_items ORDER BY playlistId ASC, position ASC, addedAt ASC")
+    fun observeAll(): Flow<List<PlaylistItemEntity>>
+
     @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY position ASC, addedAt ASC")
-    suspend fun getForPlaylist(playlistId: Long): List<PlaylistItemEntity>
+    fun getForPlaylist(playlistId: Long): List<PlaylistItemEntity>
 
     @Query("SELECT COALESCE(MAX(position), -1) FROM playlist_items WHERE playlistId = :playlistId")
-    suspend fun maxPosition(playlistId: Long): Int
+    fun maxPosition(playlistId: Long): Int
 }

@@ -19,6 +19,7 @@ class LibraryListQueryTest {
         assertTrue(LibraryListQuery.matchesSearch(row, "RIVER", LibraryTab.MUSIC))
         assertTrue(LibraryListQuery.matchesSearch(row, "highway", LibraryTab.MUSIC))
         assertTrue(LibraryListQuery.matchesSearch(row, "track-01", LibraryTab.MUSIC))
+        assertTrue(LibraryListQuery.matchesSearch(row, "night", LibraryTab.FAVORITES))
         assertFalse(LibraryListQuery.matchesSearch(row, "missing", LibraryTab.MUSIC))
     }
 

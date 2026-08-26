@@ -31,10 +31,11 @@ object LibraryListQuery {
             return true
         }
         return when (tab) {
-            LibraryTab.MUSIC -> contains(row.title, needle) ||
-                contains(row.artist, needle) ||
-                contains(row.album, needle) ||
-                contains(row.fileName, needle)
+            LibraryTab.MUSIC, LibraryTab.FAVORITES, LibraryTab.PLAYLISTS ->
+                contains(row.title, needle) ||
+                    contains(row.artist, needle) ||
+                    contains(row.album, needle) ||
+                    contains(row.fileName, needle)
             LibraryTab.VIDEO -> contains(row.title, needle) || contains(row.fileName, needle)
         }
     }

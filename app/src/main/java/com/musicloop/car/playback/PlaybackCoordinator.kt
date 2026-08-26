@@ -27,6 +27,7 @@ class PlaybackCoordinator(
     private var queue: List<PlayableRef> = emptyList()
     private var index: Int = -1
     private var needsPrepare: Boolean = false
+    /** Session-only Play Next / Add to Queue. Not persisted. */
     private val explicitItems = ArrayList<PlayableRef>()
     private val _explicitQueue = MutableStateFlow<List<PlayableRef>>(emptyList())
     val explicitQueue: StateFlow<List<PlayableRef>> = _explicitQueue.asStateFlow()

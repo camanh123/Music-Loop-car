@@ -1,14 +1,9 @@
 package com.musicloop.car.database
 
 import com.musicloop.car.library.MediaListRow
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class RoomUserCollectionsRepository(
     database: AppDatabase
 ) : UserCollectionsRepository {
@@ -74,16 +69,9 @@ class RoomUserCollectionsRepository(
     }
 
     override fun observePlaylists(): Flow<List<PlaylistRecord>> {
-        return playlists.observeAll().flatMapLatest { rows ->
-            if (rows.isEmpty()) {
-                flowOf(emptyList())
-            } else {
-                combine(rows.map { playlist ->
-                    items.observeForPlaylist(playlist.id).map { entries ->
-                        playlist.toRecord(entries.size)
-                    }
-                }) { it.toList() }
-            }
+        return combine(playlists.observeAll(), items.observeAll()) { rows, allItems ->
+            val grouped = allItems.groupBy { it.playlistId }
+            rows.map { playlist -> playlist.toRecord(grouped[playlist.id]?.size ?: 0) }
         }
     }
 
