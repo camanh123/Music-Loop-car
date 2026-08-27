@@ -31,6 +31,7 @@ import com.musicloop.car.library.LibraryEmptyState
 import com.musicloop.car.library.LibraryListQuery
 import com.musicloop.car.library.LibrarySort
 import com.musicloop.car.library.LibraryTab
+import com.musicloop.car.library.MediaRowText
 import com.musicloop.car.library.LibraryUiState
 import com.musicloop.car.library.LibraryUiStore
 import com.musicloop.car.library.MediaListRow
@@ -49,7 +50,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2D.3 car library UX polish for 1280x720. USB stays read-only.
+ * Phase 2D.4 auto-advance and car UI polish. USB stays read-only.
  * Audio plays in-place. Video opens PlayerView. USB stays read-only.
  */
 class MainActivity : AppCompatActivity() {
@@ -120,6 +121,10 @@ class MainActivity : AppCompatActivity() {
             } else {
                 selectTab(LibraryTab.PLAYLISTS)
             }
+        }
+        binding.usbStatus.setOnLongClickListener {
+            showUsbTools()
+            true
         }
         binding.buttonSort.setOnClickListener { showSortPicker() }
         binding.buttonQueue.setOnClickListener { showQueue() }
@@ -313,10 +318,12 @@ class MainActivity : AppCompatActivity() {
         libraryStore.saveTab(tab)
         val selected = ContextCompat.getDrawable(this, R.drawable.bg_tab_selected)
         val idle = ContextCompat.getDrawable(this, R.drawable.bg_button)
+        val quiet = ContextCompat.getDrawable(this, R.drawable.bg_button_quiet)
+        val quietSelected = ContextCompat.getDrawable(this, R.drawable.bg_button_quiet_selected)
         binding.tabMusic.background = if (tab == LibraryTab.MUSIC) selected else idle
         binding.tabVideo.background = if (tab == LibraryTab.VIDEO) selected else idle
-        binding.tabFavorites.background = if (tab == LibraryTab.FAVORITES) selected else idle
-        binding.tabPlaylists.background = if (tab == LibraryTab.PLAYLISTS) selected else idle
+        binding.tabFavorites.background = if (tab == LibraryTab.FAVORITES) quietSelected else quiet
+        binding.tabPlaylists.background = if (tab == LibraryTab.PLAYLISTS) quietSelected else quiet
         binding.searchInput.hint = when (tab) {
             LibraryTab.VIDEO -> getString(R.string.search_hint_video)
             LibraryTab.PLAYLISTS -> getString(R.string.playlist_name_hint)
@@ -382,6 +389,9 @@ class MainActivity : AppCompatActivity() {
         )
         val scanning = state.scanState == ScanUiState.SCANNING ||
             state.scanState == ScanUiState.DETECTING_USB
+        val usbHealthy = state.usbOnline && state.usbHostState != UsbHostState.USB_ERROR
+        binding.buttonScanLibrary.visibility = if (usbHealthy) View.GONE else View.VISIBLE
+        binding.buttonCapability.visibility = if (usbHealthy) View.GONE else View.VISIBLE
         binding.scanProgress.visibility = if (scanning) View.VISIBLE else View.GONE
         binding.scanProgress.max = 100
         binding.scanProgress.progress = state.progress.percent
@@ -391,6 +401,7 @@ class MainActivity : AppCompatActivity() {
             state.audioCount,
             state.videoCount
         )
+        binding.scanStatus.visibility = if (scanning) View.VISIBLE else View.GONE
         presentUsbDiagnostic(state)
         if (!state.usbOnline) {
             usbWasOffline = true
@@ -542,23 +553,42 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showUsbTools() {
+        val labels = arrayOf(
+            getString(R.string.reload_usb),
+            getString(R.string.capability_short)
+        )
+        AlertDialog.Builder(this)
+            .setItems(labels) { _, which ->
+                when (which) {
+                    0 -> withReadPermission { musicLoopApp().lifecycleController.manualRescan() }
+                    1 -> withReadPermission { runCapabilityScan() }
+                }
+            }
+            .show()
+    }
+
     private fun renderPlayback(state: PlaybackUiState) {
         lastPlayback = state
-        binding.nowPlayingTitle.text = state.current?.displayTitle ?: getString(R.string.player_idle)
-        binding.nowPlayingArtist.text = state.current?.displayArtist.orEmpty()
-        binding.positionText.text = formatClock(state.positionMs)
-        binding.durationText.text = formatClock(state.durationMs)
-        binding.buttonPlayPause.text = if (state.status == PlayStatus.PLAYING) {
-            getString(R.string.pause)
-        } else {
-            getString(R.string.play)
-        }
-        if (!userSeeking && state.durationMs > 0L) {
-            binding.audioSeekBar.progress =
-                ((state.positionMs * 1000L) / state.durationMs).toInt().coerceIn(0, 1000)
-        }
-        state.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
-            binding.nowPlayingArtist.text = getString(R.string.playback_error, message)
+        val showBar = state.current != null
+        binding.audioPlayerBar.visibility = if (showBar) View.VISIBLE else View.GONE
+        if (showBar) {
+            binding.nowPlayingTitle.text = state.current?.displayTitle ?: getString(R.string.player_idle)
+            binding.nowPlayingArtist.text = state.current?.displayArtist.orEmpty()
+            binding.positionText.text = formatClock(state.positionMs)
+            binding.durationText.text = formatClock(state.durationMs)
+            binding.buttonPlayPause.text = if (state.status == PlayStatus.PLAYING) {
+                getString(R.string.transport_pause)
+            } else {
+                getString(R.string.transport_play)
+            }
+            if (!userSeeking && state.durationMs > 0L) {
+                binding.audioSeekBar.progress =
+                    ((state.positionMs * 1000L) / state.durationMs).toInt().coerceIn(0, 1000)
+            }
+            state.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+                binding.nowPlayingArtist.text = getString(R.string.playback_error, message)
+            }
         }
         mediaAdapter.setCurrent(state.current?.volumeId, state.current?.relativePath)
     }
@@ -940,14 +970,24 @@ class MainActivity : AppCompatActivity() {
                     else -> binding.root.context.getString(R.string.music_glyph)
                 }
                 binding.typeGlyph.alpha = if (row.available) 1f else 0.4f
-                binding.titleText.text = row.title?.takeIf { it.isNotBlank() } ?: row.fileName
+                binding.titleText.text = MediaRowText.title(row)
                 binding.titleText.setTextColor(
                     ContextCompat.getColor(
                         binding.root.context,
                         if (row.available) R.color.text_primary else R.color.text_muted
                     )
                 )
-                binding.subtitleText.text = subtitle(row)
+                val subtitle = MediaRowText.subtitle(row)
+                if (subtitle.isNullOrBlank()) {
+                    binding.subtitleText.visibility = View.GONE
+                } else {
+                    binding.subtitleText.visibility = View.VISIBLE
+                    binding.subtitleText.text = if (subtitle == MediaRowText.UNAVAILABLE) {
+                        binding.root.context.getString(R.string.unavailable)
+                    } else {
+                        subtitle
+                    }
+                }
                 binding.subtitleText.setTextColor(
                     ContextCompat.getColor(
                         binding.root.context,
@@ -975,23 +1015,6 @@ class MainActivity : AppCompatActivity() {
                 binding.buttonMore.visibility = if (isVideo) View.GONE else View.VISIBLE
                 binding.buttonMore.setOnClickListener { onMore(row) }
                 binding.root.setOnClickListener { onClick(row) }
-            }
-
-            private fun subtitle(row: MediaListRow): String {
-                if (!row.available) {
-                    return binding.root.context.getString(R.string.unavailable)
-                }
-                if (row.mediaType == "PLAYLIST") {
-                    return row.artist?.let { "$it songs" } ?: row.fileName
-                }
-                val artist = row.artist?.takeIf { it.isNotBlank() }
-                val album = row.album?.takeIf { it.isNotBlank() }
-                return when {
-                    artist != null && album != null -> "$artist / $album"
-                    artist != null -> artist
-                    album != null -> album
-                    else -> row.fileName
-                }
             }
         }
     }

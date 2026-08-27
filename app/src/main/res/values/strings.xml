@@ -2,14 +2,14 @@
 <resources>
     <string name="app_name">MusicLoop Car</string>
     <string name="header_title">USB LIBRARY</string>
-    <string name="header_subtitle">Phase 2D — Car library UX. USB stays read-only.</string>
+    <string name="header_subtitle">Phase 2D.4 — Auto-advance and car UI polish. USB stays read-only.</string>
     <string name="playback_notification_channel">MusicLoop playback</string>
     <string name="playback_notification_placeholder">Playing USB audio</string>
     <string name="reload_usb">↻ TẢI LẠI USB</string>
     <string name="scan_short">SCAN</string>
-    <string name="usb_online">USB: ONLINE</string>
-    <string name="usb_ready">USB: READY</string>
-    <string name="usb_scanning">USB: SCANNING</string>
+    <string name="usb_online">USB ●</string>
+    <string name="usb_ready">USB ●</string>
+    <string name="usb_scanning">USB …</string>
     <string name="usb_offline">USB: OFFLINE</string>
     <string name="usb_not_detected">NO USB</string>
     <string name="usb_error">USB: ERROR</string>
@@ -20,6 +20,10 @@
     <string name="pause">PAUSE</string>
     <string name="previous">PREV</string>
     <string name="next">NEXT</string>
+    <string name="transport_play">▶</string>
+    <string name="transport_pause">⏸</string>
+    <string name="transport_prev">⏮</string>
+    <string name="transport_next">⏭</string>
     <string name="close">CLOSE</string>
     <string name="player_idle">No track</string>
     <string name="player_position_placeholder">0:00 / 0:00</string>
@@ -75,9 +79,9 @@
     <string name="empty_music">Chưa có bài nhạc trên USB</string>
     <string name="empty_video">Chưa có video trên USB</string>
     <string name="empty_search">Không tìm thấy</string>
-    <string name="search_hint">Tìm bài hát, nghệ sĩ, file…</string>
-    <string name="search_hint_video">Tìm video, tên file…</string>
-    <string name="sort_label">SORT: %1$s</string>
+    <string name="search_hint">🔎 Search…</string>
+    <string name="search_hint_video">🔎 Search video…</string>
+    <string name="sort_label">%1$s</string>
     <string name="sort_az">A → Z</string>
     <string name="sort_za">Z → A</string>
     <string name="sort_newest">Newest</string>

@@ -4,6 +4,7 @@
     <color name="bg_header">#121A24</color>
     <color name="bg_panel">#151E2A</color>
     <color name="bg_button">#243044</color>
+    <color name="bg_button_quiet">#182230</color>
     <color name="bg_button_disabled">#1A2433</color>
     <color name="accent">#E0A100</color>
     <color name="text_primary">#F4F7FB</color>
