@@ -184,8 +184,17 @@ class PlaybackCoordinator(
         }
     }
 
+    /**
+     * Audio end-of-track uses [next] so Play Next / queue / library wrap stay
+     * on one path. Video stays ENDED and does not auto-loop.
+     */
     fun onEngineEnded() {
+        val current = _state.value.current
         _state.update { it.copy(status = PlayStatus.ENDED) }
+        if (current == null || current.mediaType == "VIDEO") {
+            return
+        }
+        next()
     }
 
     /**

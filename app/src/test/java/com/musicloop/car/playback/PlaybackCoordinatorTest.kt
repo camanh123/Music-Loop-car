@@ -331,6 +331,84 @@ class PlaybackCoordinatorTest {
         assertFalse(coordinator.hasNextItem())
     }
 
+    @Test
+    fun audioEndedStartsNextLibraryTrack() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        assertTrue(engine.playing)
+        assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
+        assertEquals("b.mp3", coordinator.state.value.current?.relativePath)
+    }
+
+    @Test
+    fun audioEndedConsumesExplicitQueueFirst() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.addToQueue(track("q.mp3"))
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("q.mp3"))
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        assertTrue(engine.playing)
+    }
+
+    @Test
+    fun audioEndedFallsBackToLibraryWhenQueueEmpty() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        coordinator.addToQueue(track("q.mp3"))
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("q.mp3"))
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        assertTrue(engine.playing)
+    }
+
+    @Test
+    fun lastAudioTrackWrapsToFirstOnEnded() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 2)
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("a.mp3"))
+        assertTrue(engine.playing)
+        assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
+    }
+
+    @Test
+    fun videoEndedDoesNotAutoAdvanceOrLoop() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(
+            listOf(
+                track("one.mp4", mediaType = "VIDEO"),
+                track("two.mp4", mediaType = "VIDEO")
+            ),
+            0
+        )
+        coordinator.onEngineEnded()
+        assertTrue(engine.preparedPath!!.endsWith("one.mp4"))
+        assertEquals(PlayStatus.ENDED, coordinator.state.value.status)
+        assertEquals("one.mp4", coordinator.state.value.current?.relativePath)
+        assertFalse(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
+    @Test
+    fun audioEndedKeepsBackgroundServiceHold() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+        coordinator.onEngineEnded()
+        assertTrue(engine.playing)
+        assertEquals("b.mp3", coordinator.state.value.current?.relativePath)
+        assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
+    }
+
     private fun coordinator(
         engine: FakePlaybackEngine,
         onlineRoot: String = "/mnt/media_rw/AAAA-AAAA",
