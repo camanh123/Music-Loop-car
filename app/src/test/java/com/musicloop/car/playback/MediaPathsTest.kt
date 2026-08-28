@@ -30,4 +30,13 @@ class MediaPathsTest {
         assertNull(MediaPaths.join("/mnt/usb", "../secret.mp3"))
         assertNull(MediaPaths.join("/mnt/usb", "Music/../../etc/x.mp3"))
     }
+
+    @Test
+    fun containmentRequiresDirectoryBoundary() {
+        assertTrue(MediaPaths.isContained("/mnt/usb", "/mnt/usb/Music/a.mp3"))
+        assertTrue(!MediaPaths.isContained("/mnt/usb", "/mnt/usb2/a.mp3"))
+        assertTrue(!MediaPaths.isContained("/mnt/usb", "/mnt/usb"))
+        assertTrue(!MediaPaths.isContained("/mnt/usb", "/mnt/other/a.mp3"))
+        assertTrue(!MediaPaths.isContained("/mnt/usb", "/mnt/usb/../other/a.mp3"))
+    }
 }

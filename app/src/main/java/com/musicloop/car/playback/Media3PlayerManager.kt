@@ -14,9 +14,13 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.musicloop.car.database.LibraryRepository
 import com.musicloop.car.database.MediaItemEntity
+import com.musicloop.car.library.MediaIdentity
 import com.musicloop.car.library.MediaListRow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -59,6 +63,18 @@ class Media3PlayerManager(
 
     @Volatile
     private var lastUri: Uri? = null
+
+    @Volatile
+    private var videoSurfaceAttached = false
+
+    @Volatile
+    private var videoAttachedVolumeId: String? = null
+
+    @Volatile
+    private var videoAttachedRelativePath: String? = null
+
+    private val _closeVideoIdentity = MutableStateFlow<MediaIdentity?>(null)
+    val closeVideoIdentity: StateFlow<MediaIdentity?> = _closeVideoIdentity.asStateFlow()
 
     private val engine = object : PlaybackEngine {
         override fun prepareAndPlay(absolutePath: String, title: String?, artist: String?, mediaId: String?) {
@@ -276,6 +292,54 @@ class Media3PlayerManager(
     fun clearExplicitQueue() {
         coordinator.clearExplicitQueue()
         syncSessionService()
+    }
+
+    fun setVideoActivityAttached(attached: Boolean, volumeId: String?, relativePath: String?) {
+        videoSurfaceAttached = attached
+        if (attached && !volumeId.isNullOrBlank() && !relativePath.isNullOrBlank()) {
+            videoAttachedVolumeId = volumeId
+            videoAttachedRelativePath = relativePath
+        } else {
+            videoAttachedVolumeId = null
+            videoAttachedRelativePath = null
+        }
+    }
+
+    fun clearCloseVideoIdentity() {
+        _closeVideoIdentity.value = null
+    }
+
+    val deletionGate: DeletionPlaybackGate = object : DeletionPlaybackGate {
+        override fun isCurrent(identity: MediaIdentity): Boolean {
+            val current = coordinator.state.value.current ?: return false
+            return current.volumeId == identity.volumeId && current.relativePath == identity.relativePath
+        }
+
+        override fun isVideoAttached(identity: MediaIdentity): Boolean {
+            return videoSurfaceAttached &&
+                videoAttachedVolumeId == identity.volumeId &&
+                videoAttachedRelativePath == identity.relativePath
+        }
+
+        override fun releaseForDeletion(identity: MediaIdentity) {
+            runOnMainBlocking {
+                if (isVideoAttached(identity) ||
+                    (coordinator.state.value.current?.mediaType == "VIDEO" && isCurrent(identity))
+                ) {
+                    _closeVideoIdentity.value = identity
+                }
+                coordinator.stopForDeletion(identity.volumeId, identity.relativePath)
+                stopAndDropUsbMedia("usb_delete")
+                syncSessionService()
+            }
+        }
+
+        override fun reconcileDeleted(identities: List<MediaIdentity>) {
+            runOnMainBlocking {
+                coordinator.reconcileDeleted(identities)
+                syncSessionService()
+            }
+        }
     }
 
     fun playItems(items: List<MediaListRow>, startIndex: Int) {

@@ -2,6 +2,7 @@ package com.musicloop.car.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -123,6 +124,30 @@ class LibraryListQueryTest {
         assertEquals(
             listOf("a.mp4"),
             LibraryListQuery.apply(rows, LibraryTab.VIDEO, "a", LibrarySort.A_Z).map { it.fileName }
+        )
+    }
+
+    @Test
+    fun existingAudioAndVideoStayVisibleRegardlessOfDeleteCapability() {
+        val rows = listOf(audio(fileName = "keep.mp3"), video(fileName = "keep.mp4"))
+        assertEquals(1, LibraryListQuery.apply(rows, LibraryTab.MUSIC, "", LibrarySort.A_Z).size)
+        assertEquals(1, LibraryListQuery.apply(rows, LibraryTab.VIDEO, "", LibrarySort.A_Z).size)
+        assertNull(
+            LibraryEmptyState.listOverlay(
+                tab = LibraryTab.VIDEO,
+                query = "",
+                usbOnline = true,
+                listEmpty = false
+            )
+        )
+        assertEquals(
+            LibraryEmptyState.Overlay.VIDEO,
+            LibraryEmptyState.listOverlay(
+                tab = LibraryTab.VIDEO,
+                query = "",
+                usbOnline = true,
+                listEmpty = true
+            )
         )
     }
 

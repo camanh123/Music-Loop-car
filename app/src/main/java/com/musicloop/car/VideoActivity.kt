@@ -57,6 +57,7 @@ class VideoActivity : AppCompatActivity() {
         }
         currentRow = row
         binding.playerView.player = musicLoopApp().playerManager.player
+        musicLoopApp().playerManager.setVideoActivityAttached(true, row.volumeId, row.relativePath)
         val saved = store.load()
         val sameVideo = VideoRestore.matches(row, saved)
         val usbOnline = musicLoopApp().lifecycleController.uiState.value.usbOnline
@@ -84,11 +85,28 @@ class VideoActivity : AppCompatActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                musicLoopApp().playerManager.closeVideoIdentity.collect { identity ->
+                    val playing = currentRow
+                    if (identity != null &&
+                        playing != null &&
+                        playing.volumeId == identity.volumeId &&
+                        playing.relativePath == identity.relativePath
+                    ) {
+                        musicLoopApp().playerManager.clearCloseVideoIdentity()
+                        finish()
+                    }
+                }
+            }
+        }
     }
 
     override fun onStart() {
         super.onStart()
         binding.playerView.player = musicLoopApp().playerManager.player
+        val row = currentRow
+        musicLoopApp().playerManager.setVideoActivityAttached(true, row?.volumeId, row?.relativePath)
     }
 
     override fun onPause() {
@@ -100,8 +118,12 @@ class VideoActivity : AppCompatActivity() {
         hideHandler.removeCallbacks(hideRunnable)
         persistPosition(force = true)
         binding.playerView.player = null
+        musicLoopApp().playerManager.setVideoActivityAttached(false, null, null)
         if (isFinishing) {
-            musicLoopApp().playerManager.pause()
+            val status = musicLoopApp().playerManager.state.value.status
+            if (status != PlayStatus.STOPPED && status != PlayStatus.IDLE) {
+                musicLoopApp().playerManager.pause()
+            }
         }
         super.onStop()
     }
@@ -184,6 +206,7 @@ class VideoActivity : AppCompatActivity() {
         lastGoodPositionMs = pendingSeekMs
         persistIdentity(row, resetPosition = false)
         store.savePosition(pendingSeekMs, !pauseAfterSeek, System.currentTimeMillis())
+        musicLoopApp().playerManager.setVideoActivityAttached(true, row.volumeId, row.relativePath)
         musicLoopApp().playerManager.playItem(row)
         updateTransportEnabled()
         showOverlay(autoHide = true)

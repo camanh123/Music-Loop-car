@@ -77,6 +77,18 @@ class LibraryRepositoryTest {
         assertEquals(10L, stored.createdAt)
     }
 
+    @Test
+    fun removeMediaDeletesOnlyThatIdentity() = runTest {
+        val repo = InMemoryLibraryRepository()
+        repo.upsertMedia(listOf(media("VOL", "a.mp3"), media("VOL", "b.mp3")))
+        repo.removeMedia("VOL", "a.mp3")
+        val remaining = repo.mediaForVolume("VOL")
+        assertEquals(1, remaining.size)
+        assertEquals("b.mp3", remaining.single().relativePath)
+        assertEquals(null, repo.mediaByIdentity("VOL", "a.mp3"))
+        assertEquals("b.mp3", repo.mediaByIdentity("VOL", "b.mp3")?.relativePath)
+    }
+
     private fun volume(
         volumeId: String,
         online: Boolean,

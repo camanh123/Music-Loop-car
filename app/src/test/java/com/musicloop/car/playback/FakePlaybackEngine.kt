@@ -8,6 +8,7 @@ class FakePlaybackEngine : PlaybackEngine {
     var positionMs = 0L
     var durationMs = 12_000L
     val seeks = mutableListOf<Long>()
+    var onStop: (() -> Unit)? = null
 
     override fun prepareAndPlay(absolutePath: String, title: String?, artist: String?, mediaId: String?) {
         preparedPath = absolutePath
@@ -30,6 +31,7 @@ class FakePlaybackEngine : PlaybackEngine {
         stopped = true
         positionMs = 0L
         preparedPath = null
+        onStop?.invoke()
     }
 
     override fun seekTo(positionMs: Long) {

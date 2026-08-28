@@ -12,8 +12,10 @@ import com.musicloop.car.database.RoomUserCollectionsRepository
 import com.musicloop.car.database.UserCollectionsRepository
 import com.musicloop.car.library.AndroidMetadataReader
 import com.musicloop.car.library.LibraryMediaScanner
+import com.musicloop.car.library.SafeUsbDeletionCoordinator
 import com.musicloop.car.playback.Media3PlayerManager
 import com.musicloop.car.playback.MediaItemResolver
+import com.musicloop.car.storage.JavaUsbFileSystem
 import com.musicloop.car.storage.UsbStorageManager
 import com.musicloop.car.usb.UsbLifecycleController
 import com.musicloop.car.usb.UsbMountReceiver
@@ -36,6 +38,9 @@ class MusicLoopApp : Application() {
         private set
 
     lateinit var collections: UserCollectionsRepository
+        private set
+
+    lateinit var deletion: SafeUsbDeletionCoordinator
         private set
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -72,6 +77,14 @@ class MusicLoopApp : Application() {
             repository = repository,
             resolver = MediaItemResolver(snapshotVolumes = { storage.snapshotVolumes() }),
             scope = applicationScope
+        )
+        deletion = SafeUsbDeletionCoordinator(
+            snapshotVolumes = { storage.snapshotVolumes() },
+            libraryLookup = { volumeId, relativePath -> repository.mediaByIdentity(volumeId, relativePath) },
+            removeFromLibrary = { volumeId, relativePath -> repository.removeMedia(volumeId, relativePath) },
+            playback = playerManager.deletionGate,
+            fs = JavaUsbFileSystem(),
+            resolver = MediaItemResolver(snapshotVolumes = { storage.snapshotVolumes() })
         )
         registerMountReceiver()
         lifecycleController.start()

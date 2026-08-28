@@ -77,6 +77,25 @@ class VolumeEligibilityTest {
         assertEquals("1234-5678", first.volumeId)
     }
 
+    @Test
+    fun canWriteDoesNotAffectPresenceOrScanEligibility() {
+        val writable = snapshot().copy(canWrite = true)
+        val readOnly = snapshot().copy(canWrite = false)
+        assertTrue(writable.scannable)
+        assertTrue(readOnly.scannable)
+        assertTrue(writable.presentMountedRemovable)
+        assertTrue(readOnly.presentMountedRemovable)
+        assertTrue(UsbAccess.classify(writable).allowsDelete)
+        assertFalse(UsbAccess.classify(readOnly).allowsDelete)
+        assertTrue(UsbAccess.classify(readOnly).readable)
+    }
+
+    @Test
+    fun readOnlyMountStateIsDetected() {
+        assertTrue(VolumeEligibility.isReadOnlyMount("mounted_ro"))
+        assertFalse(VolumeEligibility.isReadOnlyMount("mounted"))
+    }
+
     private fun snapshot(
         uuid: String? = "AAAA-AAAA",
         rootPath: String? = "/mnt/media_rw/AAAA-AAAA",

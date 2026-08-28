@@ -57,7 +57,10 @@ class UsbWriteSafetyAuditTest {
                     }
                     forbidden.forEach { token ->
                         if (line.contains(token)) {
-                            hits += "${file.path}:${index + 1}: $token"
+                            val allowedDeleteOp = token == ".delete(" && file.name == "UsbFileDeleteOp.kt"
+                            if (!allowedDeleteOp) {
+                                hits += "${file.path}:${index + 1}: $token"
+                            }
                         }
                     }
                     forbiddenPaths.forEach { token ->
@@ -82,6 +85,30 @@ class UsbWriteSafetyAuditTest {
         assertTrue(
             "WRITE_EXTERNAL_STORAGE must not be requested",
             !Regex("""<uses-permission[^>]*WRITE_EXTERNAL_STORAGE""").containsMatchIn(manifest)
+        )
+        val deleteOpCandidates = listOf(
+            File("src/main/java/com/musicloop/car/storage/UsbFileDeleteOp.kt"),
+            File("../app/src/main/java/com/musicloop/car/storage/UsbFileDeleteOp.kt")
+        )
+        val deleteOp = deleteOpCandidates.first { it.isFile }.readText()
+        assertTrue(
+            "USB file delete must stay isolated in UsbFileDeleteOp",
+            deleteOp.contains("file.delete()")
+        )
+        val coordinatorCandidates = listOf(
+            File("src/main/java/com/musicloop/car/library/SafeUsbDeletionCoordinator.kt"),
+            File("../app/src/main/java/com/musicloop/car/library/SafeUsbDeletionCoordinator.kt")
+        )
+        val coordinator = coordinatorCandidates.first { it.isFile }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val trimmed = line.trim()
+                trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+            }
+            .joinToString("\n")
+        assertTrue(
+            "Deletion must not use lastKnownRootPath",
+            !coordinator.contains("lastKnownRootPath")
         )
         assertTrue(
             "FOREGROUND_SERVICE is required for Phase 2C.1 audio",

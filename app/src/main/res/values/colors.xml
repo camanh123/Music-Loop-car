@@ -19,4 +19,6 @@
     <color name="status_offline">#E85D4C</color>
     <color name="bg_search">#101820</color>
     <color name="bg_row_current">#2A2410</color>
+    <color name="bg_row_selected">#1A3348</color>
+    <color name="delete_destructive">#E85D4C</color>
 </resources>

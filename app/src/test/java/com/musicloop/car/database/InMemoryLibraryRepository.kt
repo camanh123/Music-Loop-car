@@ -39,6 +39,10 @@ class InMemoryLibraryRepository : LibraryRepository {
         return media.values.filter { it.volumeId == volumeId }
     }
 
+    override suspend fun mediaByIdentity(volumeId: String, relativePath: String): MediaItemEntity? {
+        return media[volumeId to relativePath]
+    }
+
     override suspend fun upsertMedia(items: List<MediaItemEntity>) {
         if (items.isEmpty()) {
             return
@@ -54,6 +58,11 @@ class InMemoryLibraryRepository : LibraryRepository {
             }
             media[key] = stored
         }
+        publish()
+    }
+
+    override suspend fun removeMedia(volumeId: String, relativePath: String) {
+        media.remove(volumeId to relativePath)
         publish()
     }
 

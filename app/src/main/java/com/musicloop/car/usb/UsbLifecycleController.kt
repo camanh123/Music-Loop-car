@@ -6,6 +6,7 @@ import com.musicloop.car.database.LibraryRepository
 import com.musicloop.car.database.LibrarySnapshot
 import com.musicloop.car.database.UsbVolumeEntity
 import com.musicloop.car.library.LibraryMediaScanner
+import com.musicloop.car.library.LibraryDiagnostics
 import com.musicloop.car.library.LibraryUiState
 import com.musicloop.car.library.ScanOutcome
 import com.musicloop.car.library.ScanProgress
@@ -230,6 +231,12 @@ class UsbLifecycleController(
                     "action=CACHE_RESTORE volumeId=${active.volumeId} cachedItems=${cached.size}"
                 )
                 val scanning = autoScan && scannable.isNotEmpty()
+                LibraryDiagnostics.volume(active)
+                LibraryDiagnostics.log(
+                    "cache volumeId=${active.volumeId} currentVolumeAudio=${cached.count { it.mediaType == "AUDIO" }} " +
+                        "currentVolumeVideo=${cached.count { it.mediaType == "VIDEO" }} " +
+                        "cachedTotal=${cached.size} scannable=${scannable.size} willScan=$scanning"
+                )
                 _uiState.update {
                     it.copy(
                         usbOnline = true,
@@ -286,6 +293,7 @@ class UsbLifecycleController(
                 emptyList()
             }
             if (snapshots.isEmpty()) {
+                LibraryDiagnostics.log("scan skipped scannable=0")
                 mutex.withLock {
                     val present = snapshotVolumesSafe().filter { it.presentMountedRemovable }
                     applyVolumeRecords(present)
@@ -305,6 +313,11 @@ class UsbLifecycleController(
                     break
                 }
                 lastOutcome = try {
+                    LibraryDiagnostics.log(
+                        "scan start volumeId=${snapshot.volumeId} root=${snapshot.rootPath ?: "-"} " +
+                            "readable=${snapshot.canRead} writable=${snapshot.canWrite} " +
+                            "listFiles=${snapshot.listFilesNonNull}"
+                    )
                     scanner.scanVolume(
                         snapshot = snapshot,
                         onProgress = { progress ->
@@ -321,9 +334,17 @@ class UsbLifecycleController(
                     )
                 } catch (_: kotlinx.coroutines.CancellationException) {
                     ScanOutcome.CANCELLED
-                } catch (_: Exception) {
+                } catch (error: Exception) {
+                    LibraryDiagnostics.log(
+                        "scan exception volumeId=${snapshot.volumeId} ${error.javaClass.simpleName}"
+                    )
                     ScanOutcome.FAILED
                 }
+                LibraryDiagnostics.log(
+                    "scan result volumeId=${snapshot.volumeId} outcome=$lastOutcome " +
+                        "changed=${scanner.lastIncrementalReport.changed} new=${scanner.lastIncrementalReport.newItems} " +
+                        "stale=${scanner.lastIncrementalReport.stale} unchanged=${scanner.lastIncrementalReport.unchanged}"
+                )
                 if (lastOutcome == ScanOutcome.COMPLETED) {
                     val report = scanner.lastIncrementalReport
                     logRecovery(
@@ -544,6 +565,10 @@ class UsbLifecycleController(
     private fun applyLibrarySnapshot(snapshot: LibrarySnapshot) {
         val online = snapshot.volumes.firstOrNull { it.isOnline } ?: snapshot.volumes.firstOrNull()
         val rows = snapshot.media.take(LibraryScanPolicy.UI_LIST_LIMIT).map { it.toMediaListRow() }
+        LibraryDiagnostics.log(
+            "room AUDIO=${snapshot.audioCount} VIDEO=${snapshot.videoCount} total=${snapshot.totalCount} " +
+                "volumes=${snapshot.volumes.size} currentVolumeId=${_uiState.value.volumeId.ifBlank { "-" }}"
+        )
         _uiState.update { current ->
             current.copy(
                 audioCount = snapshot.audioCount,
