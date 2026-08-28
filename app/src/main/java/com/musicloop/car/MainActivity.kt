@@ -446,6 +446,19 @@ class MainActivity : AppCompatActivity() {
         usbOnline = state.usbOnline
         allMedia = state.media
         showFiltered()
+        val roomAudio = state.media.count { it.mediaType == "AUDIO" }
+        val roomVideo = state.media.count { it.mediaType == "VIDEO" }
+        val currentAudio = state.media.count { it.mediaType == "AUDIO" && it.volumeId == state.volumeId }
+        val currentVideo = state.media.count { it.mediaType == "VIDEO" && it.volumeId == state.volumeId }
+        val visibleAudio = visibleRows.count { it.mediaType == "AUDIO" }
+        val visibleVideo = visibleRows.count { it.mediaType == "VIDEO" }
+        com.musicloop.car.library.LibraryDiagnostics.log(
+            "ui tab=$libraryTab usbOnline=$usbOnline host=${state.usbHostState} " +
+                "queryBlank=${searchQuery.isBlank()} overlayListEmpty=${visibleRows.isEmpty()} " +
+                "roomAudio=$roomAudio roomVideo=$roomVideo " +
+                "currentVolumeAudio=$currentAudio currentVolumeVideo=$currentVideo " +
+                "visibleAudio=$visibleAudio visibleVideo=$visibleVideo volumeId=${state.volumeId}"
+        )
     }
 
     private fun presentUsbDiagnostic(state: LibraryUiState) {
