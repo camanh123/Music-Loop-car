@@ -31,6 +31,8 @@ class PlaybackCoordinator(
     private val explicitItems = ArrayList<PlayableRef>()
     private val _explicitQueue = MutableStateFlow<List<PlayableRef>>(emptyList())
     val explicitQueue: StateFlow<List<PlayableRef>> = _explicitQueue.asStateFlow()
+    private var playbackGeneration: Long = 0L
+    private var autoAdvancedGeneration: Long = -1L
 
     fun markStarting(item: PlayableRef) {
         _state.update {
@@ -187,13 +189,26 @@ class PlaybackCoordinator(
     /**
      * Audio end-of-track uses [next] so Play Next / queue / library wrap stay
      * on one path. Video stays ENDED and does not auto-loop.
+     *
+     * STOPPED/ERROR/IDLE (USB drop, explicit stop, failure) ignore stale ENDED.
+     * BUFFERING and a per-generation latch ignore duplicate ENDED for the same item.
      */
     fun onEngineEnded() {
-        val current = _state.value.current
-        _state.update { it.copy(status = PlayStatus.ENDED) }
+        val state = _state.value
+        when (state.status) {
+            PlayStatus.STOPPED, PlayStatus.ERROR, PlayStatus.IDLE -> return
+            PlayStatus.BUFFERING, PlayStatus.ENDED -> return
+            PlayStatus.PLAYING, PlayStatus.PAUSED -> Unit
+        }
+        val current = state.current
         if (current == null || current.mediaType == "VIDEO") {
+            _state.update { it.copy(status = PlayStatus.ENDED) }
             return
         }
+        if (autoAdvancedGeneration == playbackGeneration) {
+            return
+        }
+        autoAdvancedGeneration = playbackGeneration
         next()
     }
 
@@ -278,6 +293,8 @@ class PlaybackCoordinator(
         needsPrepare = false
         explicitItems.clear()
         publishExplicitQueue()
+        playbackGeneration = 0L
+        autoAdvancedGeneration = -1L
         _state.value = PlaybackUiState()
     }
 
@@ -323,6 +340,7 @@ class PlaybackCoordinator(
     }
 
     private fun playItemInternal(item: PlayableRef) {
+        playbackGeneration += 1L
         _state.update {
             it.copy(
                 current = item,
