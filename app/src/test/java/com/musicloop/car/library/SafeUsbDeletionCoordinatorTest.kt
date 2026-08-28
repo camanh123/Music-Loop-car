@@ -447,6 +447,12 @@ class SafeUsbDeletionCoordinatorTest {
             File("../app/src/main/java/com/musicloop/car/library/SafeUsbDeletionCoordinator.kt")
         )
         val text = roots.first { it.isFile }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val trimmed = line.trim()
+                trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+            }
+            .joinToString("\n")
         return !text.contains("lastKnownRootPath")
     }
 

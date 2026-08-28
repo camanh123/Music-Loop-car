@@ -100,6 +100,12 @@ class UsbWriteSafetyAuditTest {
             File("../app/src/main/java/com/musicloop/car/library/SafeUsbDeletionCoordinator.kt")
         )
         val coordinator = coordinatorCandidates.first { it.isFile }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val trimmed = line.trim()
+                trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+            }
+            .joinToString("\n")
         assertTrue(
             "Deletion must not use lastKnownRootPath",
             !coordinator.contains("lastKnownRootPath")

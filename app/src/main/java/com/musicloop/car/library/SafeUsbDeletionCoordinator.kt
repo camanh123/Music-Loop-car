@@ -13,8 +13,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Safe USB media deletion. Identity is always volumeId + relativePath resolved
- * against the current StorageManager snapshot. Never trusts lastKnownRootPath
- * or a cached absolute path.
+ * against the current StorageManager snapshot. Cached mount locations and
+ * stale absolute paths are never used as identity.
  */
 class SafeUsbDeletionCoordinator(
     private val snapshotVolumes: () -> List<VolumeSnapshot>,
