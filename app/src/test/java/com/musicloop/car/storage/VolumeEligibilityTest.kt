@@ -69,6 +69,13 @@ class VolumeEligibilityTest {
     }
 
     @Test
+    fun canReadFalseStillScannableWhenListFilesWorks() {
+        val snapshot = snapshot().copy(canRead = false, listFilesNonNull = true, canWrite = false)
+        assertTrue(snapshot.scannable)
+        assertTrue(snapshot.presentMountedRemovable)
+    }
+
+    @Test
     fun remountWithChangedRootKeepsVolumeIdentity() {
         val first = snapshot(uuid = "1234-5678", rootPath = "/mnt/media_rw/disk-a")
         val remount = snapshot(uuid = "1234-5678", rootPath = "/mnt/media_rw/disk-b")

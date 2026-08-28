@@ -165,7 +165,7 @@ class MediaEnumerator(
 
     private fun rootVanished(root: File): Boolean {
         return try {
-            !root.exists() || !root.canRead()
+            !root.exists()
         } catch (_: Exception) {
             true
         }
@@ -173,19 +173,8 @@ class MediaEnumerator(
 
     companion object {
         fun isSymbolicLink(file: File): Boolean {
-            try {
-                if (Files.isSymbolicLink(file.toPath())) {
-                    return true
-                }
-            } catch (_: Exception) {
-                // android.jar unit-test stubs may no-op NIO; fall through.
-            }
             return try {
-                val parent = file.parentFile ?: return false
-                val canonicalChild = file.canonicalFile
-                val canonicalParent = parent.canonicalFile
-                canonicalChild.parentFile != canonicalParent ||
-                    !canonicalChild.name.equals(file.name, ignoreCase = false)
+                Files.isSymbolicLink(file.toPath())
             } catch (_: Exception) {
                 false
             }

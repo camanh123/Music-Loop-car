@@ -64,6 +64,24 @@ class MediaEnumeratorTest {
     }
 
     @Test
+    fun symlinkVolumeRootStillEnumeratesSubdirectories() {
+        val target = createTempDirectory("enum-alias-target").toFile()
+        val parent = createTempDirectory("enum-alias-parent").toFile()
+        try {
+            target.resolve("Music").apply { mkdirs() }.resolve("a.mp3").writeText("a")
+            target.resolve("Videos").apply { mkdirs() }.resolve("c.mp4").writeText("c")
+            val alias = parent.resolve("volume-root")
+            Files.createSymbolicLink(alias.toPath(), target.toPath())
+            val result = MediaEnumerator().collect(alias, maxDepth = 12, maxFiles = 1000)
+            assertEquals(1, result.files.count { it.mediaType == MediaKind.AUDIO })
+            assertEquals(1, result.files.count { it.mediaType == MediaKind.VIDEO })
+        } finally {
+            parent.deleteRecursively()
+            target.deleteRecursively()
+        }
+    }
+
+    @Test
     fun skipsSymlinkChildren() {
         val root = createTempDirectory("enum-link").toFile()
         val outside = createTempDirectory("enum-link-target").toFile()
@@ -110,6 +128,24 @@ class MediaEnumeratorTest {
             val result = MediaEnumerator().collect(root, maxDepth = 8, maxFiles = 10)
             assertEquals("DCIM/Camera/video.mp4", result.files.single().relativePath)
             assertTrue(!result.files.single().relativePath.startsWith("/"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun nestedMusicAndVideoFoldersAreEnumerated() {
+        val root = createTempDirectory("enum-music-video").toFile()
+        try {
+            root.resolve("Music").apply { mkdirs() }.resolve("a.mp3").writeText("a")
+            root.resolve("Music").resolve("B.MP3").writeText("b")
+            root.resolve("Videos").apply { mkdirs() }.resolve("c.mp4").writeText("c")
+            root.resolve("Videos").resolve("D.MP4").writeText("d")
+            val result = MediaEnumerator().collect(root, maxDepth = 12, maxFiles = 1000)
+            assertEquals(2, result.files.count { it.mediaType == MediaKind.AUDIO })
+            assertEquals(2, result.files.count { it.mediaType == MediaKind.VIDEO })
+            assertEquals("Music/a.mp3", result.files.single { it.fileName == "a.mp3" }.relativePath)
+            assertEquals("Videos/D.MP4", result.files.single { it.fileName == "D.MP4" }.relativePath)
         } finally {
             root.deleteRecursively()
         }

@@ -21,6 +21,7 @@ class MediaExtensionsTest {
     @Test
     fun acceptsVideoWhitelist() {
         assertEquals(MediaKind.VIDEO, MediaExtensions.kindOf("clip.mp4"))
+        assertEquals(MediaKind.VIDEO, MediaExtensions.kindOf("clip.MP4"))
         assertEquals(MediaKind.VIDEO, MediaExtensions.kindOf("clip.MKV"))
         assertEquals(MediaKind.VIDEO, MediaExtensions.kindOf("clip.avi"))
         assertEquals(MediaKind.VIDEO, MediaExtensions.kindOf("clip.ts"))

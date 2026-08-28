@@ -108,12 +108,18 @@ class LibraryMediaScanner(
                     )
                     continue
                 }
+                try {
+                    pending += resolveItem(volumeId, file, previous)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    pending += filenameFallbackItem(volumeId, file, previous)
+                }
                 if (previous == null) {
                     newCount += 1
                 } else {
                     changedCount += 1
                 }
-                pending += resolveItem(volumeId, file, previous)
                 processed += 1
                 if (pending.size >= batchSize) {
                     repository.upsertMedia(pending.toList())
@@ -203,17 +209,42 @@ class LibraryMediaScanner(
         )
     }
 
+    private fun filenameFallbackItem(
+        volumeId: String,
+        file: EnumeratedMediaFile,
+        previous: MediaItemEntity?
+    ): MediaItemEntity {
+        return MediaItemEntity(
+            id = previous?.id ?: 0L,
+            volumeId = volumeId,
+            relativePath = file.relativePath,
+            fileName = file.fileName,
+            extension = file.extension,
+            mediaType = file.mediaType.name,
+            sizeBytes = file.sizeBytes,
+            modifiedTime = file.modifiedTime,
+            durationMs = previous?.durationMs,
+            title = previous?.title,
+            artist = previous?.artist,
+            album = previous?.album,
+            width = previous?.width,
+            height = previous?.height,
+            scanStatus = ScanStatus.PARTIAL,
+            lastScannedAt = now()
+        )
+    }
+
     private fun readMetadata(file: File): ExtractedMetadata {
         return try {
             metadataReader.read(file)
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             ExtractedMetadata.PARTIAL
         }
     }
 
     private fun rootVanished(root: File): Boolean {
         return try {
-            !root.exists() || !root.canRead()
+            !root.exists()
         } catch (_: Exception) {
             true
         }

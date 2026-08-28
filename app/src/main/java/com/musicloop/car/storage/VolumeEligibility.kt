@@ -38,7 +38,6 @@ object VolumeEligibility {
             !root.isNullOrBlank() &&
             snapshot.exists &&
             snapshot.isDirectory &&
-            snapshot.canRead &&
             snapshot.listFilesNonNull &&
             !ScanPolicy.isForbiddenScanRoot(root)
     }
@@ -50,7 +49,7 @@ object VolumeEligibility {
             !isMounted(snapshot.state) -> "not mounted"
             root.isNullOrBlank() -> "root unresolved"
             ScanPolicy.isForbiddenScanRoot(root) -> "internal/forbidden"
-            !snapshot.exists || !snapshot.isDirectory || !snapshot.canRead || !snapshot.listFilesNonNull ->
+            !snapshot.exists || !snapshot.isDirectory || !snapshot.listFilesNonNull ->
                 "directory not listable"
             else -> "not scannable"
         }

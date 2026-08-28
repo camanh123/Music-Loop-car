@@ -262,6 +262,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        withReadPermission {
+            musicLoopApp().lifecycleController.manualRescan()
+        }
     }
 
     override fun onResume() {
