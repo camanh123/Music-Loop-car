@@ -315,8 +315,8 @@ class UsbLifecycleController(
                 lastOutcome = try {
                     LibraryDiagnostics.log(
                         "scan start volumeId=${snapshot.volumeId} root=${snapshot.rootPath ?: "-"} " +
-                            "readable=${snapshot.canRead} writable=${snapshot.canWrite} " +
-                            "listFiles=${snapshot.listFilesNonNull}"
+                            "present=${snapshot.presentMountedRemovable} readable=${snapshot.canRead} " +
+                            "listFiles=${snapshot.listFilesNonNull} scannable=${snapshot.scannable}"
                     )
                     scanner.scanVolume(
                         snapshot = snapshot,

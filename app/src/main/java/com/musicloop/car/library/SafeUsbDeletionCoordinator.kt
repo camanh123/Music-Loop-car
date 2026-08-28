@@ -7,6 +7,7 @@ import com.musicloop.car.playback.MediaPaths
 import com.musicloop.car.playback.ResolveResult
 import com.musicloop.car.storage.MediaExtensions
 import com.musicloop.car.storage.UsbAccess
+import com.musicloop.car.storage.UsbAccessCapability
 import com.musicloop.car.storage.UsbFileSystem
 import com.musicloop.car.storage.VolumeSnapshot
 import java.util.concurrent.atomic.AtomicBoolean
@@ -82,7 +83,7 @@ class SafeUsbDeletionCoordinator(
         if (!access.readable) {
             return ItemOutcome.Failure(DeleteFailureReason.OFFLINE)
         }
-        if (!access.allowsDelete) {
+        if (access.capability == UsbAccessCapability.READ_ONLY) {
             return ItemOutcome.Failure(DeleteFailureReason.READ_ONLY)
         }
 
@@ -139,6 +140,10 @@ class SafeUsbDeletionCoordinator(
         if (!fs.isRegularFile(absolute)) {
             return ItemOutcome.Failure(DeleteFailureReason.NOT_REGULAR_FILE)
         }
+        val writeAccess = UsbAccess.classifyForDelete(snapshot) { root -> fs.canWrite(root) }
+        if (!writeAccess.allowsDelete) {
+            return ItemOutcome.Failure(DeleteFailureReason.READ_ONLY)
+        }
         if (!fs.canWrite(absolute)) {
             return ItemOutcome.Failure(DeleteFailureReason.READ_ONLY)
         }
@@ -154,7 +159,7 @@ class SafeUsbDeletionCoordinator(
         if (stillSame == null) {
             return ItemOutcome.Failure(DeleteFailureReason.MOUNT_CHANGED)
         }
-        val accessBeforeDelete = UsbAccess.classify(stillSame)
+        val accessBeforeDelete = UsbAccess.classifyForDelete(stillSame) { root -> fs.canWrite(root) }
         if (!accessBeforeDelete.allowsDelete) {
             return ItemOutcome.Failure(
                 if (!accessBeforeDelete.readable) DeleteFailureReason.OFFLINE else DeleteFailureReason.READ_ONLY

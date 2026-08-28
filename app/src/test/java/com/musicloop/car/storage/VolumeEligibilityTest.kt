@@ -85,9 +85,12 @@ class VolumeEligibilityTest {
         assertTrue(readOnly.scannable)
         assertTrue(writable.presentMountedRemovable)
         assertTrue(readOnly.presentMountedRemovable)
-        assertTrue(UsbAccess.classify(writable).allowsDelete)
-        assertFalse(UsbAccess.classify(readOnly).allowsDelete)
+        assertTrue(UsbAccess.classify(writable).readable)
         assertTrue(UsbAccess.classify(readOnly).readable)
+        assertFalse(UsbAccess.classify(writable).allowsDelete)
+        assertFalse(UsbAccess.classify(readOnly).allowsDelete)
+        assertTrue(UsbAccess.classifyForDelete(writable) { true }.allowsDelete)
+        assertFalse(UsbAccess.classifyForDelete(readOnly) { false }.allowsDelete)
     }
 
     @Test

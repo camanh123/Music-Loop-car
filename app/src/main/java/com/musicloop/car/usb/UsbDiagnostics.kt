@@ -23,7 +23,7 @@ object UsbDiagnostics {
             "USB_EVENT action=$action volumes=${snapshots.size} removableMounted=${removable.size} list=$summary"
         )
         val access = removable.joinToString(";") { snap ->
-            "volumeId=${snap.volumeId},canRead=${snap.canRead},canWrite=${snap.canWrite},listFiles=${snap.listFilesNonNull},scannable=${snap.scannable}"
+            "volumeId=${snap.volumeId},present=${snap.presentMountedRemovable},canRead=${snap.canRead},listFiles=${snap.listFilesNonNull},scannable=${snap.scannable}"
         }.ifBlank { "-" }
         com.musicloop.car.library.LibraryDiagnostics.log(
             "snapshot action=$action removableMounted=${removable.size} access=$access"

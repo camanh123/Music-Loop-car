@@ -28,26 +28,75 @@ class UsbAccessCapabilityTest {
     }
 
     @Test
-    fun readOnlyWhenCanWriteIsFalse() {
-        val access = UsbAccess.classify(snapshot(canWrite = false))
-        assertEquals(UsbAccessCapability.READ_ONLY, access.capability)
+    fun observationalClassifyNeverGrantsDeleteFromSnapshotCanWrite() {
+        val access = UsbAccess.classify(snapshot(canWrite = true))
+        assertEquals(UsbAccessCapability.READABLE, access.capability)
         assertTrue(access.readable)
+        assertFalse(access.writable)
         assertFalse(access.allowsDelete)
-        assertEquals("USB READ-ONLY", access.label)
+        assertEquals(listOf("USB READABLE"), access.statusLabels())
     }
 
     @Test
-    fun writableWhenMountedAndCanWrite() {
-        val access = UsbAccess.classify(snapshot(canWrite = true))
+    fun observationalClassifyStaysReadableWhenCanWriteIsFalse() {
+        val access = UsbAccess.classify(snapshot(canWrite = false))
+        assertEquals(UsbAccessCapability.READABLE, access.capability)
+        assertTrue(access.readable)
+        assertFalse(access.allowsDelete)
+        assertEquals("USB READABLE", access.label)
+    }
+
+    @Test
+    fun classifyForDeleteProbesLiveRoot() {
+        val probed = mutableListOf<String>()
+        val access = UsbAccess.classifyForDelete(snapshot(canWrite = false)) { root ->
+            probed += root
+            true
+        }
+        assertEquals(listOf("/mnt/media_rw/AAAA-AAAA"), probed)
         assertEquals(UsbAccessCapability.WRITABLE, access.capability)
         assertTrue(access.allowsDelete)
         assertEquals(listOf("USB READABLE", "USB WRITABLE"), access.statusLabels())
     }
 
     @Test
+    fun classifyForDeleteReadOnlyWhenProbeFalse() {
+        val access = UsbAccess.classifyForDelete(snapshot(canWrite = true)) { false }
+        assertEquals(UsbAccessCapability.READ_ONLY, access.capability)
+        assertTrue(access.readable)
+        assertFalse(access.allowsDelete)
+    }
+
+    @Test
+    fun classifyForDeleteReadOnlyWhenProbeThrows() {
+        val access = UsbAccess.classifyForDelete(snapshot()) {
+            throw IllegalStateException("canWrite failed")
+        }
+        assertEquals(UsbAccessCapability.READ_ONLY, access.capability)
+        assertTrue(access.readable)
+        assertFalse(access.allowsDelete)
+    }
+
+    @Test
+    fun classifyDoesNotInvokeWriteProbe() {
+        var probed = false
+        val access = UsbAccess.classify(snapshot(canWrite = true))
+        assertFalse(probed)
+        assertFalse(access.allowsDelete)
+        UsbAccess.classifyForDelete(snapshot()) {
+            probed = true
+            true
+        }
+        assertTrue(probed)
+    }
+
+    @Test
     fun classifyUsesCurrentVolumeIdNotStaleRoot() {
         val snapshots = listOf(snapshot(uuid = "AAAA-AAAA", root = "/mnt/new", canWrite = true))
-        val access = UsbAccess.classify(snapshots, "AAAA-AAAA")
+        val observed = UsbAccess.classify(snapshots, "AAAA-AAAA")
+        assertTrue(observed.readable)
+        assertFalse(observed.allowsDelete)
+        val access = UsbAccess.classifyForDelete(snapshots, "AAAA-AAAA") { true }
         assertTrue(access.allowsDelete)
         val missing = UsbAccess.classify(snapshots, "BBBB-BBBB")
         assertEquals(UsbAccessCapability.OFFLINE, missing.capability)
