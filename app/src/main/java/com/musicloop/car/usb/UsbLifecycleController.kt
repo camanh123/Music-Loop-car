@@ -372,13 +372,23 @@ class UsbLifecycleController(
                             "volumeId=${_uiState.value.volumeId} cachedItems=${lastRestoreReport?.cachedItems ?: 0} libraryVisibleMs=$visibleMs scanCompletedMs=$completedMs"
                         )
                         lastOnlineVolumeIds = lastSeenVolumeIds
+                        val rows = libraryRowsFromRoom()
+                        val audio = rows.count { it.mediaType == "AUDIO" }
+                        val video = rows.count { it.mediaType == "VIDEO" }
+                        LibraryDiagnostics.log(
+                            "scan ui refresh AUDIO=$audio VIDEO=$video total=${rows.size} volumeId=${_uiState.value.volumeId}"
+                        )
                         _uiState.update {
                             it.copy(
                                 scanState = ScanUiState.COMPLETED,
                                 usbHostState = UsbHostState.USB_READY,
                                 usbOnline = true,
                                 diagnosticMessage = null,
-                                statusMessage = "Completed"
+                                statusMessage = "Completed",
+                                media = rows,
+                                audioCount = audio,
+                                videoCount = video,
+                                totalCount = rows.size
                             )
                         }
                     }
@@ -560,6 +570,22 @@ class UsbLifecycleController(
                 progress = ScanProgress()
             )
         }
+    }
+
+    private suspend fun libraryRowsFromRoom(): List<com.musicloop.car.library.MediaListRow> {
+        val volumes = try {
+            repository.getAllVolumes()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val items = volumes.flatMap { volume ->
+            try {
+                repository.mediaForVolume(volume.volumeId)
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        return items.take(LibraryScanPolicy.UI_LIST_LIMIT).map { it.toMediaListRow() }
     }
 
     private fun applyLibrarySnapshot(snapshot: LibrarySnapshot) {

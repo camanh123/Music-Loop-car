@@ -64,7 +64,8 @@ class UsbStorageManager(
         } catch (_: Exception) {
             null
         }
-        val rootPath = resolveRootPath(volume)
+        val candidates = collectRootCandidates(volume, uuid)
+        val rootPath = UsbRootResolver.selectRoot(candidates) { path -> probeRoot(path) }
         val root = rootPath?.let { File(it) }
         val exists = flag { root?.exists() == true }
         val isDirectory = flag { root?.isDirectory == true }
@@ -73,6 +74,13 @@ class UsbStorageManager(
             root?.listFiles()
         } catch (_: Exception) {
             null
+        }
+        if (removable && !primary) {
+            com.musicloop.car.library.LibraryDiagnostics.log(
+                "root chosen=${rootPath ?: "-"} candidates=${candidates.size} " +
+                    "exists=$exists dir=$isDirectory listFiles=${listed != null} " +
+                    "uuid=${uuid ?: "-"}"
+            )
         }
         val totalSpace = try {
             root?.totalSpace ?: 0L
@@ -141,31 +149,79 @@ class UsbStorageManager(
 
     /**
      * API 29 CARFU-safe root resolution: directory (API 30+), then getPath(), then mPath.
-     * Never invents USB1/USB2 paths.
+     * Never invents USB1/USB2 paths. Prefer [snapshotVolume], which picks a listable alias.
      */
     @SuppressLint("PrivateApi")
     fun resolveRootPath(volume: StorageVolume): String? {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            try {
-                volume.directory?.absolutePath?.takeIf { it.isNotBlank() }?.let { return it }
-            } catch (_: Exception) {
-                // Fall through to hidden API used on Android 10.
-            }
-        }
-        try {
-            val method = StorageVolume::class.java.getMethod("getPath")
-            val path = method.invoke(volume) as? String
-            if (!path.isNullOrBlank()) {
-                return path
-            }
+        return collectRootCandidates(volume, uuidOf(volume)).firstOrNull()
+    }
+
+    @SuppressLint("PrivateApi")
+    fun collectRootCandidates(volume: StorageVolume, uuid: String? = uuidOf(volume)): List<String> {
+        return UsbRootResolver.uniqueCandidates(
+            listOf(
+                directoryPath(volume),
+                hiddenString(volume, "getPath"),
+                hiddenFileOrString(volume, "mPath"),
+                hiddenString(volume, "getInternalPath"),
+                hiddenFileOrString(volume, "mInternalPath"),
+                UsbRootResolver.storageUuidCandidate(uuid)
+            )
+        )
+    }
+
+    private fun probeRoot(path: String): UsbRootResolver.Probe {
+        val root = File(path)
+        val exists = flag { root.exists() }
+        val isDirectory = flag { root.isDirectory }
+        val listed = try {
+            root.listFiles()
         } catch (_: Exception) {
-            // Continue.
+            null
+        }
+        return UsbRootResolver.Probe(
+            exists = exists,
+            isDirectory = isDirectory,
+            listFilesNonNull = listed != null
+        )
+    }
+
+    private fun directoryPath(volume: StorageVolume): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            return null
         }
         return try {
-            val field = StorageVolume::class.java.getDeclaredField("mPath")
+            volume.directory?.absolutePath?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun uuidOf(volume: StorageVolume): String? {
+        return try {
+            volume.uuid?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @SuppressLint("PrivateApi")
+    private fun hiddenString(volume: StorageVolume, methodName: String): String? {
+        return try {
+            val method = StorageVolume::class.java.getMethod(methodName)
+            (method.invoke(volume) as? String)?.takeIf { it.isNotBlank() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    @SuppressLint("PrivateApi")
+    private fun hiddenFileOrString(volume: StorageVolume, fieldName: String): String? {
+        return try {
+            val field = StorageVolume::class.java.getDeclaredField(fieldName)
             field.isAccessible = true
             when (val value = field.get(volume)) {
-                is File -> value.absolutePath
+                is File -> value.absolutePath.takeIf { it.isNotBlank() }
                 is String -> value.takeIf { it.isNotBlank() }
                 else -> null
             }

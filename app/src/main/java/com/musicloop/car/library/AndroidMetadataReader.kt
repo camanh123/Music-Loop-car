@@ -36,7 +36,7 @@ class AndroidMetadataReader : MetadataReader {
                     complete = true
                 )
             }
-        } catch (_: Exception) {
+        } catch (_: Throwable) {
             ExtractedMetadata.PARTIAL
         }
     }
