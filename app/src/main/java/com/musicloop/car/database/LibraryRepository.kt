@@ -16,7 +16,9 @@ interface LibraryRepository {
     suspend fun getVolume(volumeId: String): UsbVolumeEntity?
     suspend fun upsertVolume(entity: UsbVolumeEntity)
     suspend fun mediaForVolume(volumeId: String): List<MediaItemEntity>
+    suspend fun mediaByIdentity(volumeId: String, relativePath: String): MediaItemEntity?
     suspend fun upsertMedia(items: List<MediaItemEntity>)
+    suspend fun removeMedia(volumeId: String, relativePath: String)
     suspend fun markStale(ids: List<Long>, at: Long)
     fun observeLibrary(): Flow<LibrarySnapshot>
 }

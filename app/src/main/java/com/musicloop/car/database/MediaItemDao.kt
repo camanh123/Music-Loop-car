@@ -15,6 +15,12 @@ interface MediaItemDao {
     @Query("SELECT * FROM media_items WHERE volumeId = :volumeId")
     fun getForVolume(volumeId: String): List<MediaItemEntity>
 
+    @Query("SELECT * FROM media_items WHERE volumeId = :volumeId AND relativePath = :relativePath LIMIT 1")
+    fun getByIdentity(volumeId: String, relativePath: String): MediaItemEntity?
+
+    @Query("DELETE FROM media_items WHERE volumeId = :volumeId AND relativePath = :relativePath")
+    fun removeByIdentity(volumeId: String, relativePath: String)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAll(items: List<MediaItemEntity>)
 

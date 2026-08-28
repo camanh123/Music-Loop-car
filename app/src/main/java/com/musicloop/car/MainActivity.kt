@@ -15,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -27,31 +28,42 @@ import androidx.recyclerview.widget.RecyclerView
 import com.musicloop.car.databinding.ActivityMainBinding
 import com.musicloop.car.databinding.ItemMediaBinding
 import com.musicloop.car.library.CollectionRows
+import com.musicloop.car.library.DeleteFailureReason
+import com.musicloop.car.library.DeleteMessages
 import com.musicloop.car.library.LibraryEmptyState
 import com.musicloop.car.library.LibraryListQuery
 import com.musicloop.car.library.LibrarySort
 import com.musicloop.car.library.LibraryTab
+import com.musicloop.car.library.MediaFileInfo
+import com.musicloop.car.library.MediaIdentity
 import com.musicloop.car.library.MediaRowText
+import com.musicloop.car.library.MediaSelection
+import com.musicloop.car.library.MediaSelectionState
 import com.musicloop.car.library.LibraryUiState
 import com.musicloop.car.library.LibraryUiStore
 import com.musicloop.car.library.MediaListRow
 import com.musicloop.car.library.ScanUiState
+import com.musicloop.car.library.identity
 import com.musicloop.car.playback.PlayStatus
 import com.musicloop.car.playback.PlaybackUiState
 import com.musicloop.car.playback.VideoPlaybackStore
 import com.musicloop.car.playback.VideoRestore
 import com.musicloop.car.storage.CapabilityReportFormatter
 import com.musicloop.car.storage.DeviceInfo
+import com.musicloop.car.storage.UsbAccess
 import com.musicloop.car.storage.UsbStorageManager
+import com.musicloop.car.storage.UsbVolumeAccess
 import com.musicloop.car.usb.UsbHostState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import java.util.concurrent.Executors
 
 /**
- * Phase 2D.4 auto-advance and car UI polish. USB stays read-only.
- * Audio plays in-place. Video opens PlayerView. USB stays read-only.
+ * Phase 2D.5 USB media management. Deletion uses the dedicated coordinator.
+ * Audio plays in-place. Video opens PlayerView.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -63,7 +75,8 @@ class MainActivity : AppCompatActivity() {
     private val mediaAdapter = MediaListAdapter(
         onClick = { row -> onRowClicked(row) },
         onFavorite = { row -> toggleFavorite(row) },
-        onMore = { row -> showRowActions(row) }
+        onMore = { row -> showRowActions(row) },
+        onLongClick = { row -> onRowLongPressed(row) }
     )
 
     private val permissionLauncher = registerForActivityResult(
@@ -94,6 +107,16 @@ class MainActivity : AppCompatActivity() {
     private var playlistItemEntities = emptyList<com.musicloop.car.database.PlaylistItemEntity>()
     private var openPlaylistId: Long? = null
     private var playlistItemsJob: Job? = null
+    private var visibleRows: List<MediaListRow> = emptyList()
+    private var selection = MediaSelectionState()
+    private var deleteInProgress = false
+    private var progressDialog: AlertDialog? = null
+
+    private val selectionBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            exitSelection()
+        }
+    }
 
     private val videoScrollListener = object : RecyclerView.OnScrollListener() {
         override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
@@ -144,6 +167,14 @@ class MainActivity : AppCompatActivity() {
         binding.buttonPlayPause.setOnClickListener { musicLoopApp().playerManager.playPause() }
         binding.buttonPrevious.setOnClickListener { musicLoopApp().playerManager.previous() }
         binding.buttonNext.setOnClickListener { musicLoopApp().playerManager.next() }
+        binding.buttonSelectAll.setOnClickListener {
+            selection = MediaSelection.selectAll(selection, visibleRows)
+            renderSelectionBar()
+            showFiltered()
+        }
+        binding.buttonDeleteSelected.setOnClickListener { confirmDeleteSelected() }
+        binding.buttonCancelSelection.setOnClickListener { exitSelection() }
+        onBackPressedDispatcher.addCallback(this, selectionBackCallback)
         binding.audioSeekBar.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: android.widget.SeekBar?, progress: Int, fromUser: Boolean) = Unit
             override fun onStartTrackingTouch(seekBar: android.widget.SeekBar?) {
@@ -316,6 +347,9 @@ class MainActivity : AppCompatActivity() {
         }
         libraryTab = tab
         libraryStore.saveTab(tab)
+        if (selection.active && selection.tab != tab) {
+            exitSelection(refresh = false)
+        }
         val selected = ContextCompat.getDrawable(this, R.drawable.bg_tab_selected)
         val idle = ContextCompat.getDrawable(this, R.drawable.bg_button)
         val quiet = ContextCompat.getDrawable(this, R.drawable.bg_button_quiet)
@@ -474,11 +508,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        visibleRows = filtered
         mediaAdapter.bindList(
             items = filtered,
             favorites = favoriteKeys,
             currentVolumeId = lastPlayback.current?.volumeId,
-            currentRelativePath = lastPlayback.current?.relativePath
+            currentRelativePath = lastPlayback.current?.relativePath,
+            selectionActive = selection.active,
+            selected = selection.selected
         )
         val overlay = LibraryEmptyState.listOverlay(
             tab = libraryTab,
@@ -594,6 +631,14 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onRowClicked(row: MediaListRow) {
+        if (selection.active) {
+            if (MediaSelection.canSelect(selection.tab, row)) {
+                selection = MediaSelection.toggle(selection, row)
+                renderSelectionBar()
+                showFiltered()
+            }
+            return
+        }
         when {
             row.mediaType == "VIDEO" -> {
                 persistVideoScroll()
@@ -616,6 +661,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun onRowLongPressed(row: MediaListRow) {
+        if (row.mediaType == "PLAYLIST") {
+            return
+        }
+        if (!MediaSelection.canSelect(libraryTab, row)) {
+            return
+        }
+        if (!selection.active) {
+            selection = MediaSelection.enter(libraryTab, row)
+        } else if (selection.tab == libraryTab) {
+            selection = MediaSelection.toggle(selection, row)
+        }
+        renderSelectionBar()
+        showFiltered()
+    }
+
+    private fun exitSelection(refresh: Boolean = true) {
+        if (!selection.active && !selectionBackCallback.isEnabled) {
+            if (refresh) {
+                showFiltered()
+            }
+            return
+        }
+        selection = MediaSelection.exit()
+        renderSelectionBar()
+        if (refresh) {
+            showFiltered()
+        }
+    }
+
+    private fun renderSelectionBar() {
+        val active = selection.active
+        selectionBackCallback.isEnabled = active
+        binding.selectionBar.visibility = if (active) View.VISIBLE else View.GONE
+        if (active) {
+            binding.selectionCount.text = getString(R.string.selection_count, selection.count)
+            binding.buttonDeleteSelected.isEnabled = selection.count > 0 && !deleteInProgress
+        }
+    }
+
+    private fun currentUsbAccess(): UsbVolumeAccess {
+        val volumeId = musicLoopApp().lifecycleController.uiState.value.volumeId
+        val snapshots = try {
+            UsbStorageManager(applicationContext).snapshotVolumes()
+        } catch (_: Exception) {
+            emptyList()
+        }
+        return UsbAccess.classify(snapshots, volumeId)
+    }
+
+    private fun isCurrentlyPlaying(row: MediaListRow): Boolean {
+        val current = lastPlayback.current ?: return false
+        return current.volumeId == row.volumeId && current.relativePath == row.relativePath
+    }
+
     private fun showRowActions(row: MediaListRow) {
         if (row.mediaType == "PLAYLIST") {
             showPlaylistActions(row)
@@ -623,26 +723,196 @@ class MainActivity : AppCompatActivity() {
         }
         val labels = mutableListOf<String>()
         val actions = mutableListOf<() -> Unit>()
-        if (row.available && row.mediaType == "AUDIO") {
-            labels += getString(R.string.play_next)
-            actions += { musicLoopApp().playerManager.playNext(row) }
-            labels += getString(R.string.add_to_queue)
-            actions += { musicLoopApp().playerManager.enqueue(row) }
-        }
+        labels += getString(R.string.action_play)
+        actions += { onRowClicked(row) }
         if (row.mediaType == "AUDIO") {
-            labels += getString(R.string.add_to_playlist)
+            labels += if (favoriteKeys.contains(row.volumeId to row.relativePath)) {
+                getString(R.string.action_unfavorite)
+            } else {
+                getString(R.string.action_favorite)
+            }
+            actions += { toggleFavorite(row) }
+            if (row.available) {
+                labels += getString(R.string.action_play_next)
+                actions += { musicLoopApp().playerManager.playNext(row) }
+                labels += getString(R.string.action_add_queue)
+                actions += { musicLoopApp().playerManager.enqueue(row) }
+            }
+            labels += getString(R.string.action_add_playlist)
             actions += { promptAddToPlaylist(row) }
         }
         if (libraryTab == LibraryTab.PLAYLISTS && openPlaylistId != null) {
             labels += getString(R.string.playlist_remove_item)
             actions += { removePlaylistItem(row) }
         }
-        if (labels.isEmpty()) {
-            return
+        labels += getString(R.string.action_file_info)
+        actions += { showFileInfo(row) }
+        if (row.mediaType == "AUDIO" || row.mediaType == "VIDEO") {
+            labels += getString(R.string.action_delete_usb)
+            actions += { confirmDeleteRows(listOf(row)) }
         }
         AlertDialog.Builder(this)
             .setItems(labels.toTypedArray()) { _, which -> actions[which]() }
             .show()
+    }
+
+    private fun showFileInfo(row: MediaListRow) {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.file_info_title)
+            .setMessage(MediaFileInfo.format(row))
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun confirmDeleteSelected() {
+        val rows = MediaSelection.rowsForDeletion(selection, visibleRows)
+        confirmDeleteRows(rows)
+    }
+
+    private fun confirmDeleteRows(rows: List<MediaListRow>) {
+        if (deleteInProgress || musicLoopApp().deletion.isDeleting) {
+            Toast.makeText(this, DeleteMessages.userReason(DeleteFailureReason.DUPLICATE_IN_PROGRESS), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val targets = rows.filter { it.mediaType == "AUDIO" || it.mediaType == "VIDEO" }
+        if (targets.isEmpty()) {
+            return
+        }
+        val access = currentUsbAccess()
+        if (!access.readable) {
+            Toast.makeText(this, R.string.delete_usb_offline, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (!access.allowsDelete) {
+            Toast.makeText(this, R.string.delete_usb_read_only, Toast.LENGTH_LONG).show()
+            return
+        }
+        if (targets.size == 1) {
+            val row = targets.single()
+            val playing = isCurrentlyPlaying(row)
+            val dialog = AlertDialog.Builder(this)
+                .setTitle(R.string.delete_title)
+                .setMessage(
+                    DeleteMessages.singleBody(
+                        title = MediaRowText.title(row),
+                        fileName = row.fileName,
+                        currentlyPlaying = playing,
+                        video = row.mediaType == "VIDEO"
+                    )
+                )
+                .setNegativeButton(R.string.delete_cancel, null)
+                .setPositiveButton(R.string.delete_confirm) { _, _ ->
+                    runUsbDelete(listOf(row))
+                }
+                .create()
+            dialog.setOnShowListener {
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                    ?.setTextColor(ContextCompat.getColor(this, R.color.delete_destructive))
+            }
+            dialog.show()
+            return
+        }
+        val audioCount = targets.count { it.mediaType == "AUDIO" }
+        val videoCount = targets.count { it.mediaType == "VIDEO" }
+        val totalBytes = targets.sumOf { it.sizeBytes }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(getString(R.string.delete_batch_title, targets.size))
+            .setMessage(DeleteMessages.batchBody(audioCount, videoCount, totalBytes))
+            .setNegativeButton(R.string.delete_cancel, null)
+            .setPositiveButton(getString(R.string.delete_confirm_batch, targets.size)) { _, _ ->
+                runUsbDelete(targets)
+            }
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                ?.setTextColor(ContextCompat.getColor(this, R.color.delete_destructive))
+        }
+        dialog.show()
+    }
+
+    private fun runUsbDelete(rows: List<MediaListRow>) {
+        if (deleteInProgress || musicLoopApp().deletion.isDeleting) {
+            Toast.makeText(this, DeleteMessages.userReason(DeleteFailureReason.DUPLICATE_IN_PROGRESS), Toast.LENGTH_SHORT).show()
+            return
+        }
+        val identities = rows.map { it.identity() }
+        deleteInProgress = true
+        renderSelectionBar()
+        val showProgress = identities.size > 1
+        if (showProgress) {
+            progressDialog = AlertDialog.Builder(this)
+                .setMessage(DeleteMessages.progress(1, identities.size))
+                .setCancelable(false)
+                .show()
+        }
+        lifecycleScope.launch {
+            val result = try {
+                withContext(Dispatchers.IO) {
+                    musicLoopApp().deletion.deleteAll(identities) { current, total ->
+                        if (showProgress) {
+                            mainHandler.post {
+                                progressDialog?.setMessage(DeleteMessages.progress(current, total))
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) {
+                null
+            }
+            progressDialog?.dismiss()
+            progressDialog = null
+            deleteInProgress = false
+            exitSelection()
+            if (result == null) {
+                Toast.makeText(this@MainActivity, R.string.delete_failed, Toast.LENGTH_LONG).show()
+                renderSelectionBar()
+                return@launch
+            }
+            presentDeleteResult(result, identities.size)
+            renderSelectionBar()
+        }
+    }
+
+    private fun presentDeleteResult(
+        result: com.musicloop.car.library.BatchDeleteResult,
+        requested: Int
+    ) {
+        if (result.duplicateBlocked) {
+            Toast.makeText(this, DeleteMessages.userReason(DeleteFailureReason.DUPLICATE_IN_PROGRESS), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (result.failed.isEmpty() && result.succeeded.isNotEmpty()) {
+            return
+        }
+        if (result.succeeded.isEmpty() && result.failed.isNotEmpty()) {
+            val reason = result.failed.first().reason
+            val detail = DeleteMessages.userReason(reason)
+            AlertDialog.Builder(this)
+                .setTitle(R.string.delete_failed)
+                .setMessage(detail)
+                .setPositiveButton(R.string.delete_done, null)
+                .show()
+            return
+        }
+        if (result.failed.isNotEmpty()) {
+            val details = result.failed.joinToString("\n") { item ->
+                "${item.identity.fileName}: ${DeleteMessages.userReason(item.reason)}"
+            }
+            val dialog = AlertDialog.Builder(this)
+                .setTitle(DeleteMessages.partialSummary(result.succeeded.size, requested))
+                .setMessage(getString(R.string.delete_partial_failed, result.failed.size))
+                .setNegativeButton(R.string.delete_done, null)
+                .setPositiveButton(R.string.delete_details) { _, _ ->
+                    AlertDialog.Builder(this)
+                        .setTitle(R.string.delete_details)
+                        .setMessage(details)
+                        .setPositiveButton(R.string.delete_done, null)
+                        .show()
+                }
+                .show()
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                ?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        }
     }
 
     private fun showPlaylistActions(row: MediaListRow) {
@@ -869,12 +1139,15 @@ class MainActivity : AppCompatActivity() {
     private class MediaListAdapter(
         private val onClick: (MediaListRow) -> Unit,
         private val onFavorite: (MediaListRow) -> Unit,
-        private val onMore: (MediaListRow) -> Unit
+        private val onMore: (MediaListRow) -> Unit,
+        private val onLongClick: (MediaListRow) -> Unit
     ) : RecyclerView.Adapter<MediaListAdapter.Holder>() {
         private var rows: List<MediaListRow> = emptyList()
         private var currentVolumeId: String? = null
         private var currentRelativePath: String? = null
         private var favoriteKeys: Set<Pair<String, String>> = emptySet()
+        private var selectionActive: Boolean = false
+        private var selected: Set<MediaIdentity> = emptySet()
 
         init {
             setHasStableIds(true)
@@ -884,12 +1157,16 @@ class MainActivity : AppCompatActivity() {
             items: List<MediaListRow>,
             favorites: Set<Pair<String, String>>,
             currentVolumeId: String?,
-            currentRelativePath: String?
+            currentRelativePath: String?,
+            selectionActive: Boolean,
+            selected: Set<MediaIdentity>
         ) {
             if (items == rows &&
                 favorites == favoriteKeys &&
                 currentVolumeId == this.currentVolumeId &&
-                currentRelativePath == this.currentRelativePath
+                currentRelativePath == this.currentRelativePath &&
+                selectionActive == this.selectionActive &&
+                selected == this.selected
             ) {
                 return
             }
@@ -897,6 +1174,8 @@ class MainActivity : AppCompatActivity() {
             favoriteKeys = favorites
             this.currentVolumeId = currentVolumeId
             this.currentRelativePath = currentRelativePath
+            this.selectionActive = selectionActive
+            this.selected = selected
             notifyDataSetChanged()
         }
 
@@ -939,7 +1218,7 @@ class MainActivity : AppCompatActivity() {
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
             val binding = ItemMediaBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-            return Holder(binding, onClick, onFavorite, onMore)
+            return Holder(binding, onClick, onFavorite, onMore, onLongClick)
         }
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
@@ -947,7 +1226,9 @@ class MainActivity : AppCompatActivity() {
             holder.bind(
                 row = row,
                 current = LibraryListQuery.isCurrent(row, currentVolumeId, currentRelativePath),
-                favorite = favoriteKeys.contains(row.volumeId to row.relativePath)
+                favorite = favoriteKeys.contains(row.volumeId to row.relativePath),
+                selectionActive = selectionActive,
+                selected = selected.contains(row.identity())
             )
         }
 
@@ -959,9 +1240,16 @@ class MainActivity : AppCompatActivity() {
             private val binding: ItemMediaBinding,
             private val onClick: (MediaListRow) -> Unit,
             private val onFavorite: (MediaListRow) -> Unit,
-            private val onMore: (MediaListRow) -> Unit
+            private val onMore: (MediaListRow) -> Unit,
+            private val onLongClick: (MediaListRow) -> Unit
         ) : RecyclerView.ViewHolder(binding.root) {
-            fun bind(row: MediaListRow, current: Boolean, favorite: Boolean) {
+            fun bind(
+                row: MediaListRow,
+                current: Boolean,
+                favorite: Boolean,
+                selectionActive: Boolean,
+                selected: Boolean
+            ) {
                 val isVideo = row.mediaType == "VIDEO"
                 val isPlaylist = row.mediaType == "PLAYLIST"
                 binding.typeGlyph.text = when {
@@ -994,11 +1282,16 @@ class MainActivity : AppCompatActivity() {
                         if (row.available) R.color.text_secondary else R.color.status_offline
                     )
                 )
-                binding.playGlyph.visibility = if (current) View.VISIBLE else View.INVISIBLE
+                binding.playGlyph.visibility = if (!selectionActive && current) View.VISIBLE else View.INVISIBLE
+                binding.selectMark.visibility = if (selectionActive && selected) View.VISIBLE else View.GONE
                 binding.root.setBackgroundResource(
-                    if (current) R.drawable.bg_media_row_current else R.drawable.bg_media_row
+                    when {
+                        selectionActive && selected -> R.drawable.bg_media_row_selected
+                        current -> R.drawable.bg_media_row_current
+                        else -> R.drawable.bg_media_row
+                    }
                 )
-                val showFavorite = row.mediaType == "AUDIO"
+                val showFavorite = !selectionActive && row.mediaType == "AUDIO"
                 binding.buttonFavorite.visibility = if (showFavorite) View.VISIBLE else View.GONE
                 if (showFavorite) {
                     binding.buttonFavorite.text = binding.root.context.getString(
@@ -1012,9 +1305,14 @@ class MainActivity : AppCompatActivity() {
                     )
                     binding.buttonFavorite.setOnClickListener { onFavorite(row) }
                 }
-                binding.buttonMore.visibility = if (isVideo) View.GONE else View.VISIBLE
+                val showMore = !selectionActive && !isPlaylist
+                binding.buttonMore.visibility = if (showMore) View.VISIBLE else View.GONE
                 binding.buttonMore.setOnClickListener { onMore(row) }
                 binding.root.setOnClickListener { onClick(row) }
+                binding.root.setOnLongClickListener {
+                    onLongClick(row)
+                    true
+                }
             }
         }
     }

@@ -170,6 +170,54 @@
         android:progress="0"
         android:visibility="gone" />
 
+    <LinearLayout
+        android:id="@+id/selectionBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/selectionCount"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_primary"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/buttonSelectAll"
+            style="@style/Widget.MusicLoopCar.QuietButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:layout_marginEnd="8dp"
+            android:minWidth="132dp"
+            android:text="@string/selection_select_all" />
+
+        <Button
+            android:id="@+id/buttonDeleteSelected"
+            style="@style/Widget.MusicLoopCar.QuietButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:layout_marginEnd="8dp"
+            android:minWidth="72dp"
+            android:text="@string/selection_delete"
+            android:textColor="@color/delete_destructive" />
+
+        <Button
+            android:id="@+id/buttonCancelSelection"
+            style="@style/Widget.MusicLoopCar.QuietButton"
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/search_height"
+            android:minWidth="88dp"
+            android:text="@string/selection_cancel" />
+    </LinearLayout>
+
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"

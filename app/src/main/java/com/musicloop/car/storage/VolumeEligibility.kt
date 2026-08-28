@@ -14,6 +14,11 @@ object VolumeEligibility {
             state.equals("mounted_ro", ignoreCase = true)
     }
 
+    fun isReadOnlyMount(state: String): Boolean {
+        return state == Environment.MEDIA_MOUNTED_READ_ONLY ||
+            state.equals("mounted_ro", ignoreCase = true)
+    }
+
     fun isPresentMountedRemovable(snapshot: VolumeSnapshot): Boolean {
         if (!snapshot.removable || !isMounted(snapshot.state) || snapshot.isPrimary) {
             return false

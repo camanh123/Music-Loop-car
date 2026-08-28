@@ -16,7 +16,8 @@ data class VolumeSnapshot(
     val canRead: Boolean,
     val listFilesNonNull: Boolean,
     val totalSpaceBytes: Long = 0L,
-    val freeSpaceBytes: Long = 0L
+    val freeSpaceBytes: Long = 0L,
+    val canWrite: Boolean = false
 ) {
     val volumeId: String get() = VolumeIds.resolve(uuid)
 

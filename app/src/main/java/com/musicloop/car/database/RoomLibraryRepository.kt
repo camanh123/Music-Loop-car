@@ -35,6 +35,9 @@ class RoomLibraryRepository(
     override suspend fun mediaForVolume(volumeId: String): List<MediaItemEntity> =
         media.getForVolume(volumeId)
 
+    override suspend fun mediaByIdentity(volumeId: String, relativePath: String): MediaItemEntity? =
+        media.getByIdentity(volumeId, relativePath)
+
     override suspend fun upsertMedia(items: List<MediaItemEntity>) {
         if (items.isEmpty()) {
             return
@@ -47,6 +50,10 @@ class RoomLibraryRepository(
         if (updates.isNotEmpty()) {
             media.updateAll(updates)
         }
+    }
+
+    override suspend fun removeMedia(volumeId: String, relativePath: String) {
+        media.removeByIdentity(volumeId, relativePath)
     }
 
     override suspend fun markStale(ids: List<Long>, at: Long) {

@@ -1,6 +1,7 @@
 package com.musicloop.car.playback
 
 import android.util.Log
+import com.musicloop.car.library.MediaIdentity
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +89,60 @@ class PlaybackCoordinator(
 
     fun stop() {
         stopInternal(status = PlayStatus.STOPPED, error = null)
+    }
+
+    /**
+     * Stop the current item because it will be deleted. Sets STOPPED before
+     * touching the engine so a synchronous STATE_ENDED cannot auto-advance.
+     */
+    fun stopForDeletion(volumeId: String, relativePath: String) {
+        val current = _state.value.current
+        if (current == null || current.volumeId != volumeId || current.relativePath != relativePath) {
+            return
+        }
+        autoAdvancedGeneration = playbackGeneration
+        stopInternal(status = PlayStatus.STOPPED, error = null)
+    }
+
+    fun reconcileDeleted(identities: List<MediaIdentity>) {
+        if (identities.isEmpty()) {
+            return
+        }
+        val removed = identities.toSet()
+        explicitItems.removeAll { item ->
+            removed.any { it.volumeId == item.volumeId && it.relativePath == item.relativePath }
+        }
+        publishExplicitQueue()
+        val currentItem = queue.getOrNull(index)
+        val currentDeleted = currentItem != null &&
+            removed.any { it.volumeId == currentItem.volumeId && it.relativePath == currentItem.relativePath }
+        queue = queue.filterNot { item ->
+            removed.any { it.volumeId == item.volumeId && it.relativePath == item.relativePath }
+        }
+        if (currentDeleted) {
+            index = -1
+            val stateCurrent = _state.value.current
+            val clearCurrent = stateCurrent != null &&
+                removed.any { it.volumeId == stateCurrent.volumeId && it.relativePath == stateCurrent.relativePath }
+            if (clearCurrent) {
+                _state.update {
+                    PlaybackUiState(
+                        status = PlayStatus.IDLE,
+                        mode = PlayerMode.IDLE,
+                        current = null
+                    )
+                }
+            }
+            return
+        }
+        if (currentItem != null) {
+            val nextIndex = queue.indexOfFirst {
+                it.volumeId == currentItem.volumeId && it.relativePath == currentItem.relativePath
+            }
+            index = nextIndex
+        } else if (index >= queue.size) {
+            index = queue.lastIndex
+        }
     }
 
     fun next() {
@@ -395,11 +450,6 @@ class PlaybackCoordinator(
     }
 
     private fun stopInternal(status: PlayStatus, error: String?) {
-        try {
-            engine.stop()
-        } catch (_: Exception) {
-            // Ignore engine failures while stopping.
-        }
         needsPrepare = true
         _state.update {
             it.copy(
@@ -408,6 +458,11 @@ class PlaybackCoordinator(
                 errorMessage = error,
                 needsPrepare = true
             )
+        }
+        try {
+            engine.stop()
+        } catch (_: Exception) {
+            // Ignore engine failures while stopping.
         }
     }
 

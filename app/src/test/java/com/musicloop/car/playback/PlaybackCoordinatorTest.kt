@@ -1,5 +1,6 @@
 package com.musicloop.car.playback
 
+import com.musicloop.car.library.MediaIdentity
 import com.musicloop.car.storage.VolumeSnapshot
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -477,6 +478,47 @@ class PlaybackCoordinatorTest {
         coordinator.onEngineEnded()
         assertEquals("c.mp3", coordinator.state.value.current?.relativePath)
         assertTrue(engine.playing)
+    }
+
+    @Test
+    fun stopForDeletionDoesNotAutoAdvanceOnEnded() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.stopForDeletion("AAAA-AAAA", "a.mp3")
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        coordinator.onEngineEnded()
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        assertFalse(engine.playing)
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+    }
+
+    @Test
+    fun stopForDeletionIgnoresSynchronousEndedFromEngine() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        engine.onStop = { coordinator.onEngineEnded() }
+        coordinator.stopForDeletion("AAAA-AAAA", "a.mp3")
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertFalse(engine.preparedPath?.endsWith("b.mp3") == true)
+    }
+
+    @Test
+    fun reconcileDeletedRemovesExplicitQueueAndClearsCurrent() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.addToQueue(track("c.mp3"))
+        coordinator.stopForDeletion("AAAA-AAAA", "a.mp3")
+        coordinator.reconcileDeleted(listOf(MediaIdentity("AAAA-AAAA", "a.mp3"), MediaIdentity("AAAA-AAAA", "c.mp3")))
+        assertTrue(coordinator.explicitQueue.value.isEmpty())
+        assertNull(coordinator.state.value.current)
+        assertEquals(PlayStatus.IDLE, coordinator.state.value.status)
+        coordinator.onEngineEnded()
+        assertNull(coordinator.state.value.current)
     }
 
     private fun coordinator(

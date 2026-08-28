@@ -68,6 +68,7 @@ class UsbStorageManager(
         val exists = flag { root?.exists() == true }
         val isDirectory = flag { root?.isDirectory == true }
         val canRead = flag { root?.canRead() == true }
+        val canWrite = flag { root?.canWrite() == true }
         val listed = try {
             root?.listFiles()
         } catch (_: Exception) {
@@ -95,7 +96,8 @@ class UsbStorageManager(
             canRead = canRead,
             listFilesNonNull = listed != null,
             totalSpaceBytes = totalSpace,
-            freeSpaceBytes = freeSpace
+            freeSpaceBytes = freeSpace,
+            canWrite = canWrite
         )
     }
 

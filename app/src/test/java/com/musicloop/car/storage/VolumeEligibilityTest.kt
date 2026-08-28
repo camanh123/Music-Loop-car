@@ -77,6 +77,12 @@ class VolumeEligibilityTest {
         assertEquals("1234-5678", first.volumeId)
     }
 
+    @Test
+    fun readOnlyMountStateIsDetected() {
+        assertTrue(VolumeEligibility.isReadOnlyMount("mounted_ro"))
+        assertFalse(VolumeEligibility.isReadOnlyMount("mounted"))
+    }
+
     private fun snapshot(
         uuid: String? = "AAAA-AAAA",
         rootPath: String? = "/mnt/media_rw/AAAA-AAAA",

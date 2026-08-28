@@ -57,6 +57,17 @@
         android:visibility="invisible" />
 
     <TextView
+        android:id="@+id/selectMark"
+        android:layout_width="36dp"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/select_mark"
+        android:textColor="@color/accent"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/buttonFavorite"
         android:layout_width="@dimen/row_action_size"
         android:layout_height="@dimen/row_action_size"
