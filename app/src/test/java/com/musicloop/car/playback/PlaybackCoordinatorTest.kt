@@ -1,9 +1,12 @@
 package com.musicloop.car.playback
 
 import com.musicloop.car.storage.VolumeSnapshot
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -409,13 +412,81 @@ class PlaybackCoordinatorTest {
         assertTrue(BackgroundPlaybackPolicy.shouldHoldService(coordinator.state.value))
     }
 
+    @Test
+    fun duplicateEndedBeforePrepareDoesNotSkipTrack() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine, dispatcher = dispatcher)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        advanceUntilIdle()
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        coordinator.onEngineEnded()
+        coordinator.onEngineEnded()
+        advanceUntilIdle()
+        assertEquals("b.mp3", coordinator.state.value.current?.relativePath)
+        assertTrue(engine.preparedPath!!.endsWith("b.mp3"))
+        assertEquals(PlayStatus.PLAYING, coordinator.state.value.status)
+    }
+
+    @Test
+    fun lateEndedAfterUsbStopDoesNotAutoAdvance() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.abandonUsbPlayback("BROADCAST_EJECT")
+        coordinator.onEngineEnded()
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertEquals("USB disconnected", coordinator.state.value.errorMessage)
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        assertNull(engine.preparedPath)
+        assertFalse(engine.playing)
+    }
+
+    @Test
+    fun lateEndedAfterErrorDoesNotAutoAdvance() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.onEngineError("decode failed")
+        coordinator.onEngineEnded()
+        assertEquals(PlayStatus.ERROR, coordinator.state.value.status)
+        assertEquals("decode failed", coordinator.state.value.errorMessage)
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        assertNull(engine.preparedPath)
+    }
+
+    @Test
+    fun lateEndedAfterExplicitStopDoesNotAutoAdvance() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3")), 0)
+        coordinator.stop()
+        coordinator.onEngineEnded()
+        assertEquals(PlayStatus.STOPPED, coordinator.state.value.status)
+        assertEquals("a.mp3", coordinator.state.value.current?.relativePath)
+        assertNull(engine.preparedPath)
+    }
+
+    @Test
+    fun newPlaybackGenerationCanAutoAdvanceAgain() = runTest {
+        val engine = FakePlaybackEngine()
+        val coordinator = coordinator(engine)
+        coordinator.playQueue(listOf(track("a.mp3"), track("b.mp3"), track("c.mp3")), 0)
+        coordinator.onEngineEnded()
+        assertEquals("b.mp3", coordinator.state.value.current?.relativePath)
+        coordinator.onEngineEnded()
+        assertEquals("c.mp3", coordinator.state.value.current?.relativePath)
+        assertTrue(engine.playing)
+    }
+
     private fun coordinator(
         engine: FakePlaybackEngine,
         onlineRoot: String = "/mnt/media_rw/AAAA-AAAA",
         snapshots: List<VolumeSnapshot>? = null,
-        readable: Boolean = true
+        readable: Boolean = true,
+        dispatcher: CoroutineDispatcher? = null
     ): PlaybackCoordinator {
-        val dispatcher = UnconfinedTestDispatcher()
+        val io = dispatcher ?: UnconfinedTestDispatcher()
         val resolver = MediaItemResolver(
             snapshotVolumes = {
                 snapshots ?: listOf(
@@ -438,9 +509,9 @@ class PlaybackCoordinatorTest {
         return PlaybackCoordinator(
             resolver = resolver,
             engine = engine,
-            scope = CoroutineScope(dispatcher),
-            ioDispatcher = dispatcher,
-            mainDispatcher = dispatcher
+            scope = CoroutineScope(io),
+            ioDispatcher = io,
+            mainDispatcher = io
         )
     }
 
