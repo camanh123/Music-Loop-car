@@ -4,8 +4,8 @@ import android.util.Log
 import com.musicloop.car.storage.VolumeSnapshot
 
 /**
- * Temporary CARFU investigation logs for the 2D.5 empty-library regression.
- * Observational only. Does not delete, scan, or mutate Room.
+ * Lightweight USB/library diagnostics. Observational only.
+ * Does not probe write capability and does not log individual media files.
  */
 object LibraryDiagnostics {
     const val TAG = "MusicLoopCar"
@@ -21,9 +21,9 @@ object LibraryDiagnostics {
         }
         log(
             "volume volumeId=${snapshot.volumeId} root=${snapshot.rootPath ?: "-"} " +
-                "state=${snapshot.state} online=${snapshot.presentMountedRemovable} " +
-                "readable=${snapshot.canRead} writable=${snapshot.canWrite} " +
-                "listFiles=${snapshot.listFilesNonNull} scannable=${snapshot.scannable}"
+                "state=${snapshot.state} present=${snapshot.presentMountedRemovable} " +
+                "readable=${snapshot.canRead} listFiles=${snapshot.listFilesNonNull} " +
+                "scannable=${snapshot.scannable}"
         )
     }
 }

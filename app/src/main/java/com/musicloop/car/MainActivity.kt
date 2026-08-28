@@ -58,6 +58,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -111,6 +112,7 @@ class MainActivity : AppCompatActivity() {
     private var selection = MediaSelectionState()
     private var deleteInProgress = false
     private var progressDialog: AlertDialog? = null
+    private var lastUiDiagKey: String? = null
 
     private val selectionBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -452,13 +454,17 @@ class MainActivity : AppCompatActivity() {
         val currentVideo = state.media.count { it.mediaType == "VIDEO" && it.volumeId == state.volumeId }
         val visibleAudio = visibleRows.count { it.mediaType == "AUDIO" }
         val visibleVideo = visibleRows.count { it.mediaType == "VIDEO" }
-        com.musicloop.car.library.LibraryDiagnostics.log(
-            "ui tab=$libraryTab usbOnline=$usbOnline host=${state.usbHostState} " +
-                "queryBlank=${searchQuery.isBlank()} overlayListEmpty=${visibleRows.isEmpty()} " +
-                "roomAudio=$roomAudio roomVideo=$roomVideo " +
-                "currentVolumeAudio=$currentAudio currentVolumeVideo=$currentVideo " +
-                "visibleAudio=$visibleAudio visibleVideo=$visibleVideo volumeId=${state.volumeId}"
-        )
+        val uiDiagKey = "$usbOnline|${state.usbHostState}|$roomAudio|$roomVideo|$visibleAudio|$visibleVideo"
+        if (uiDiagKey != lastUiDiagKey) {
+            lastUiDiagKey = uiDiagKey
+            com.musicloop.car.library.LibraryDiagnostics.log(
+                "ui tab=$libraryTab usbOnline=$usbOnline host=${state.usbHostState} " +
+                    "queryBlank=${searchQuery.isBlank()} overlayListEmpty=${visibleRows.isEmpty()} " +
+                    "roomAudio=$roomAudio roomVideo=$roomVideo " +
+                    "currentVolumeAudio=$currentAudio currentVolumeVideo=$currentVideo " +
+                    "visibleAudio=$visibleAudio visibleVideo=$visibleVideo volumeId=${state.volumeId}"
+            )
+        }
     }
 
     private fun presentUsbDiagnostic(state: LibraryUiState) {
@@ -721,7 +727,9 @@ class MainActivity : AppCompatActivity() {
         } catch (_: Exception) {
             emptyList()
         }
-        return UsbAccess.classify(snapshots, volumeId)
+        return UsbAccess.classifyForDelete(snapshots, volumeId) { rootPath ->
+            File(rootPath).canWrite()
+        }
     }
 
     private fun isCurrentlyPlaying(row: MediaListRow): Boolean {

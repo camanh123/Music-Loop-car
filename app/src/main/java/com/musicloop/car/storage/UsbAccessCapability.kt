@@ -1,10 +1,13 @@
 package com.musicloop.car.storage
 
 /**
- * Non-destructive USB access classification.
+ * USB access classification.
  *
- * Write capability uses StorageVolume mount state plus [File.canWrite] on the
- * current root. Never creates, writes, or deletes probe files on user media.
+ * [classify] is observational and never probes [java.io.File.canWrite].
+ * It is used by read/scan/library paths and never grants delete permission.
+ *
+ * [classifyForDelete] is the only write-capability check. Call it from the
+ * delete flow after the current live USB root is known.
  */
 enum class UsbAccessCapability {
     OFFLINE,
@@ -29,12 +32,11 @@ data class UsbVolumeAccess(
         }
 
     fun statusLabels(): List<String> {
-        if (!readable) {
-            return listOf(LABEL_OFFLINE)
-        }
-        return buildList {
-            add(LABEL_READABLE)
-            add(if (writable) LABEL_WRITABLE else LABEL_READ_ONLY)
+        return when (capability) {
+            UsbAccessCapability.OFFLINE -> listOf(LABEL_OFFLINE)
+            UsbAccessCapability.READABLE -> listOf(LABEL_READABLE)
+            UsbAccessCapability.READ_ONLY -> listOf(LABEL_READABLE, LABEL_READ_ONLY)
+            UsbAccessCapability.WRITABLE -> listOf(LABEL_READABLE, LABEL_WRITABLE)
         }
     }
 
@@ -47,6 +49,13 @@ data class UsbVolumeAccess(
 }
 
 object UsbAccess {
+    /**
+     * Read-path classification. Ignores [VolumeSnapshot.canWrite] and never
+     * probes the filesystem for write access. [allowsDelete] is always false.
+     *
+     * `mounted_ro` is reported as READ_ONLY (still readable) from mount state
+     * alone — not from [java.io.File.canWrite].
+     */
     fun classify(snapshot: VolumeSnapshot?): UsbVolumeAccess {
         if (snapshot == null || !snapshot.presentMountedRemovable) {
             return UsbVolumeAccess(
@@ -67,7 +76,50 @@ object UsbAccess {
                 writable = false
             )
         }
-        val writable = snapshot.canWrite && !VolumeEligibility.isReadOnlyMount(snapshot.state)
+        if (VolumeEligibility.isReadOnlyMount(snapshot.state)) {
+            return UsbVolumeAccess(
+                capability = UsbAccessCapability.READ_ONLY,
+                readable = true,
+                writable = false
+            )
+        }
+        return UsbVolumeAccess(
+            capability = UsbAccessCapability.READABLE,
+            readable = true,
+            writable = false
+        )
+    }
+
+    fun classify(snapshots: List<VolumeSnapshot>, volumeId: String): UsbVolumeAccess {
+        if (volumeId.isBlank()) {
+            return classify(null)
+        }
+        val snapshot = snapshots.firstOrNull { it.volumeId == volumeId && it.presentMountedRemovable }
+        return classify(snapshot)
+    }
+
+    /**
+     * Delete-path classification. Probes writability against the current live
+     * root only. Probe exceptions or a blank root mean not writable. Does not
+     * affect scan eligibility.
+     */
+    fun classifyForDelete(
+        snapshot: VolumeSnapshot?,
+        probeWritable: (rootPath: String) -> Boolean
+    ): UsbVolumeAccess {
+        val observed = classify(snapshot)
+        if (!observed.readable) {
+            return observed
+        }
+        if (observed.capability == UsbAccessCapability.READ_ONLY) {
+            return observed
+        }
+        val root = snapshot?.rootPath
+        val writable = try {
+            !root.isNullOrBlank() && probeWritable(root)
+        } catch (_: Exception) {
+            false
+        }
         return if (writable) {
             UsbVolumeAccess(
                 capability = UsbAccessCapability.WRITABLE,
@@ -83,11 +135,15 @@ object UsbAccess {
         }
     }
 
-    fun classify(snapshots: List<VolumeSnapshot>, volumeId: String): UsbVolumeAccess {
+    fun classifyForDelete(
+        snapshots: List<VolumeSnapshot>,
+        volumeId: String,
+        probeWritable: (rootPath: String) -> Boolean
+    ): UsbVolumeAccess {
         if (volumeId.isBlank()) {
-            return classify(null)
+            return classifyForDelete(null, probeWritable)
         }
         val snapshot = snapshots.firstOrNull { it.volumeId == volumeId && it.presentMountedRemovable }
-        return classify(snapshot)
+        return classifyForDelete(snapshot, probeWritable)
     }
 }

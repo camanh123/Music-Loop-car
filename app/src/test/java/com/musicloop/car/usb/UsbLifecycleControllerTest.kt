@@ -46,6 +46,34 @@ class UsbLifecycleControllerTest {
     }
 
     @Test
+    fun emptyRoomPlusReadableUsbRepopulatesMusicAndVideo() = runTest {
+        val root = createTempDirectory("life-empty-room").toFile()
+        val scope = testScope()
+        try {
+            root.resolve("song.mp3").writeText("ok")
+            root.resolve("clip.mp4").writeText("vid")
+            val repo = InMemoryLibraryRepository()
+            assertTrue(repo.getAllVolumes().isEmpty())
+            assertTrue(repo.mediaForVolume("AAAA-AAAA").isEmpty())
+            val snapshots = mutableListOf(usbSnapshot(root.absolutePath).copy(canWrite = false))
+            val controller = controller(repo, snapshots, scope)
+            controller.start()
+            advanceUntilIdle()
+            val items = repo.mediaForVolume("AAAA-AAAA")
+            assertEquals(2, items.size)
+            assertEquals(1, items.count { it.mediaType == "AUDIO" && it.fileName == "song.mp3" })
+            assertEquals(1, items.count { it.mediaType == "VIDEO" && it.fileName == "clip.mp4" })
+            assertEquals(ScanUiState.COMPLETED, controller.uiState.value.scanState)
+            assertTrue(controller.uiState.value.usbOnline)
+            assertTrue(controller.uiState.value.media.any { it.fileName == "song.mp3" })
+            assertTrue(controller.uiState.value.media.any { it.fileName == "clip.mp4" })
+        } finally {
+            scope.cancel()
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun unmountMarksOfflineAndKeepsLibrary() = runTest {
         val root = createTempDirectory("life-unmount").toFile()
         val scope = testScope()

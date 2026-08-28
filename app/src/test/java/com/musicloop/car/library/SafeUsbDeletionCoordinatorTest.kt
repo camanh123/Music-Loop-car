@@ -80,19 +80,58 @@ class SafeUsbDeletionCoordinatorTest {
 
     @Test
     fun readOnlyUsbBlocksDelete() = runTest {
-        val fs = FakeFs().also { it.add("/mnt/a/song.mp3") }
+        val fs = FakeFs().also {
+            it.add("/mnt/a/song.mp3")
+            it.writable = false
+        }
         val repo = repoWith(audio("song.mp3"))
         val coordinator = coordinator(
             root = "/mnt/a",
             repo = repo,
             fs = fs,
             gate = RecordingGate(),
-            canWrite = false
+            canWrite = true
         )
         val result = coordinator.deleteAll(listOf(id("song.mp3")))
         assertEquals(DeleteFailureReason.READ_ONLY, result.failed.single().reason)
         assertEquals(1, repo.mediaForVolume(VOLUME).size)
         assertTrue(fs.deleteCalls.isEmpty())
+        assertTrue(fs.canWriteCalls.isNotEmpty())
+    }
+
+    @Test
+    fun snapshotCanWriteFalseDoesNotBlockDeleteWhenFsWritable() = runTest {
+        val fs = FakeFs().also { it.add("/mnt/a/song.mp3") }
+        val repo = repoWith(audio("song.mp3"))
+        val result = coordinator(
+            root = "/mnt/a",
+            repo = repo,
+            fs = fs,
+            gate = RecordingGate(),
+            canWrite = false
+        ).deleteAll(listOf(id("song.mp3")))
+        assertEquals(1, result.succeeded.size)
+        assertTrue(fs.deleteCalls.contains("/mnt/a/song.mp3"))
+        assertTrue(repo.mediaForVolume(VOLUME).isEmpty())
+    }
+
+    @Test
+    fun writeProbeThrowBlocksDeleteWithoutTouchingFile() = runTest {
+        val fs = FakeFs().also {
+            it.add("/mnt/a/song.mp3")
+            it.throwOnCanWrite = true
+        }
+        val repo = repoWith(audio("song.mp3"))
+        val result = coordinator(
+            root = "/mnt/a",
+            repo = repo,
+            fs = fs,
+            gate = RecordingGate()
+        ).deleteAll(listOf(id("song.mp3")))
+        assertEquals(DeleteFailureReason.READ_ONLY, result.failed.single().reason)
+        assertTrue(fs.exists("/mnt/a/song.mp3"))
+        assertTrue(fs.deleteCalls.isEmpty())
+        assertEquals(1, repo.mediaForVolume(VOLUME).size)
     }
 
     @Test
@@ -311,7 +350,9 @@ class SafeUsbDeletionCoordinatorTest {
         val fs = object : UsbFileSystem {
             override fun exists(absolutePath: String) = absolutePath in files
             override fun isRegularFile(absolutePath: String) = absolutePath in files
-            override fun canWrite(absolutePath: String) = absolutePath in files
+            override fun canWrite(absolutePath: String): Boolean {
+                return files.any { it == absolutePath || it.startsWith("$absolutePath/") }
+            }
             override fun canonicalPath(absolutePath: String) = absolutePath
             override fun deleteRegularFile(absolutePath: String): Boolean {
                 val ok = files.remove(absolutePath)
@@ -487,13 +528,26 @@ class SafeUsbDeletionCoordinatorTest {
         val deleteCalls = mutableListOf<String>()
         val events = mutableListOf<String>()
 
+        var writable: Boolean = true
+        var throwOnCanWrite: Boolean = false
+        val canWriteCalls = mutableListOf<String>()
+
         fun add(path: String) {
             files += path
         }
 
         override fun exists(absolutePath: String): Boolean = absolutePath in files
         override fun isRegularFile(absolutePath: String): Boolean = absolutePath in files
-        override fun canWrite(absolutePath: String): Boolean = absolutePath in files
+        override fun canWrite(absolutePath: String): Boolean {
+            canWriteCalls += absolutePath
+            if (throwOnCanWrite) {
+                throw IllegalStateException("write probe failed")
+            }
+            if (!writable) {
+                return false
+            }
+            return absolutePath in files || files.any { it.startsWith("$absolutePath/") }
+        }
         override fun canonicalPath(absolutePath: String): String? = absolutePath
         override fun deleteRegularFile(absolutePath: String): Boolean {
             deleteCalls += absolutePath

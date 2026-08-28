@@ -110,6 +110,21 @@ class UsbWriteSafetyAuditTest {
             "Deletion must not use lastKnownRootPath",
             !coordinator.contains("lastKnownRootPath")
         )
+        val managerCandidates = listOf(
+            File("src/main/java/com/musicloop/car/storage/UsbStorageManager.kt"),
+            File("../app/src/main/java/com/musicloop/car/storage/UsbStorageManager.kt")
+        )
+        val manager = managerCandidates.first { it.isFile }.readText()
+            .lineSequence()
+            .filterNot { line ->
+                val trimmed = line.trim()
+                trimmed.startsWith("//") || trimmed.startsWith("*") || trimmed.startsWith("/*")
+            }
+            .joinToString("\n")
+        assertTrue(
+            "UsbStorageManager snapshot/scan must not probe canWrite",
+            !manager.contains("canWrite")
+        )
         assertTrue(
             "FOREGROUND_SERVICE is required for Phase 2C.1 audio",
             Regex("""<uses-permission[^>]*android\.permission\.FOREGROUND_SERVICE""").containsMatchIn(manifest)

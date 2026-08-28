@@ -17,6 +17,10 @@ data class VolumeSnapshot(
     val listFilesNonNull: Boolean,
     val totalSpaceBytes: Long = 0L,
     val freeSpaceBytes: Long = 0L,
+    /**
+     * Unused by snapshot/scan. [UsbStorageManager] never probes [java.io.File.canWrite].
+     * Delete-time writability is checked lazily via [UsbAccess.classifyForDelete].
+     */
     val canWrite: Boolean = false
 ) {
     val volumeId: String get() = VolumeIds.resolve(uuid)

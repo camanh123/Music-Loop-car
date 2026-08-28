@@ -11,6 +11,7 @@ import java.io.File
  * Enumerates every StorageVolume the system reports. Read-only.
  *
  * Does not hard-code USB1/USB2. Does not use SAF / DocumentsUI.
+ * Does not probe [File.canWrite] — write capability is delete-path only.
  * Media recursion for the Phase 1 PoC runs only on removable mounted volumes.
  * Phase 2A library scans use [snapshotVolumes] plus LibraryMediaScanner.
  */
@@ -68,7 +69,6 @@ class UsbStorageManager(
         val exists = flag { root?.exists() == true }
         val isDirectory = flag { root?.isDirectory == true }
         val canRead = flag { root?.canRead() == true }
-        val canWrite = flag { root?.canWrite() == true }
         val listed = try {
             root?.listFiles()
         } catch (_: Exception) {
@@ -96,8 +96,7 @@ class UsbStorageManager(
             canRead = canRead,
             listFilesNonNull = listed != null,
             totalSpaceBytes = totalSpace,
-            freeSpaceBytes = freeSpace,
-            canWrite = canWrite
+            freeSpaceBytes = freeSpace
         )
     }
 
